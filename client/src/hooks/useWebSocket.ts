@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-interface SessionData {
+export interface SessionData {
   sessionId: string;
   label: string;
   status: 'running' | 'complete' | 'failed';
@@ -14,7 +14,7 @@ interface SessionData {
   origin: { provider: string | null; surface: string | null; label: string | null } | null;
 }
 
-interface ChannelInfo {
+export interface ChannelInfo {
   id: string;
   name: string;
   type: string;
@@ -22,7 +22,7 @@ interface ChannelInfo {
   connected: boolean;
 }
 
-interface ChatMessage {
+export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;

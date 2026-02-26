@@ -1,0 +1,16 @@
+services:
+  pixel-claw:
+    build: .
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - ${OPENCLAW_DIR:-~/.openclaw}:/openclaw:ro
+    environment:
+      - OPENCLAW_DIR=/openclaw
+      - OPENCLAW_AGENT=${OPENCLAW_AGENT:-main}
+      - OPENCLAW_GATEWAY_URL=${OPENCLAW_GATEWAY_URL:-ws://host.docker.internal:3578}
+      - PORT=3000
+      - POLL_INTERVAL=${POLL_INTERVAL:-500}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

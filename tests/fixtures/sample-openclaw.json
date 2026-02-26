@@ -1,0 +1,31 @@
+{
+  "channels": {
+    "slack": {
+      "enabled": true,
+      "mode": "socket",
+      "channels": {
+        "#general": {
+          "enabled": true,
+          "allow": true
+        },
+        "#dev-ops": {
+          "enabled": false,
+          "allow": true
+        }
+      }
+    },
+    "discord": {
+      "enabled": false,
+      "channels": {
+        "#main": {
+          "enabled": true,
+          "allow": true
+        }
+      }
+    },
+    "telegram": {
+      "enabled": true,
+      "channels": {}
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import type { OfficeLayout } from '../types.js'
 import { createDefaultLayout } from '../layout/layoutSerializer.js'
+import type { Player } from './player.js'
 
 export interface RoomDoorway {
   col: number
@@ -88,13 +89,52 @@ export function getTransitionAlpha(transition: RoomTransition): number {
   return transition.progress
 }
 
+/**
+ * Check if the player is standing on a doorway tile.
+ * Returns the doorway info or null.
+ */
+export function checkPlayerDoorway(
+  player: Player,
+  doorways: RoomDoorway[],
+): RoomDoorway | null {
+  for (const d of doorways) {
+    if (player.tileCol === d.col && player.tileRow === d.row) {
+      return d
+    }
+  }
+  return null
+}
+
 export function createDefaultRooms(): RoomDefinition[] {
+  const mainLayout = createDefaultLayout()
+  const slackLayout = createDefaultLayout()
+  const discordLayout = createDefaultLayout()
+
   return [
     {
       id: 'main-hall',
       name: 'Main Hall',
-      layout: createDefaultLayout(),
-      doorways: [],
+      layout: mainLayout,
+      doorways: [
+        { col: 19, row: 5, targetRoomId: 'slack-room', targetCol: 1, targetRow: 5 },
+        { col: 19, row: 6, targetRoomId: 'discord-room', targetCol: 1, targetRow: 6 },
+      ],
+    },
+    {
+      id: 'slack-room',
+      name: 'Slack Room',
+      layout: slackLayout,
+      doorways: [
+        { col: 0, row: 5, targetRoomId: 'main-hall', targetCol: 18, targetRow: 5 },
+      ],
+    },
+    {
+      id: 'discord-room',
+      name: 'Discord Room',
+      layout: discordLayout,
+      doorways: [
+        { col: 0, row: 6, targetRoomId: 'main-hall', targetCol: 18, targetRow: 6 },
+      ],
     },
   ]
 }

@@ -2,7 +2,8 @@ import { useRef, useEffect, useCallback, useState } from 'react'
 import { useWebSocket } from './hooks/useWebSocket.js'
 import { useWorld } from './hooks/useWorld.js'
 import { useGameInput } from './hooks/useGameInput.js'
-import { createPlayer, updatePlayer } from './world/engine/player.js'
+import { useInteraction } from './interaction/useInteraction.js'
+import { createPlayer, updatePlayer, playerToCharacter, loadAppearance, getInteractTarget } from './world/engine/player.js'
 import type { Player } from './world/engine/player.js'
 import { Camera } from './world/engine/camera.js'
 import { startGameLoop } from './world/engine/gameLoop.js'
@@ -16,20 +17,30 @@ import {
   checkPlayerDoorway,
   createDefaultRooms,
 } from './world/engine/rooms.js'
-import type { RoomDoorway } from './world/engine/rooms.js'
 import { RoomSelector } from './components/RoomSelector.js'
+import { InteractionPanel } from './interaction/InteractionPanel.js'
+import { StatusTab } from './interaction/StatusTab.js'
+import { ChatTab } from './interaction/ChatTab.js'
+import { ActionsTab } from './interaction/ActionsTab.js'
+import { RoomIndicator } from './ui/RoomIndicator.js'
+import { HelpOverlay } from './ui/HelpOverlay.js'
 import { TILE_SIZE } from './world/types.js'
 import { ZOOM_DEFAULT_DPR_FACTOR } from './world/constants.js'
 
+const NO_KEYS = { up: false, down: false, left: false, right: false, interact: false }
+
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const { connected, sessions, channels } = useWebSocket()
+  const { connected, sessions, channels, chatMessages, sendPrompt, abortSession, getHistory } = useWebSocket()
   const { world, update: updateWorld, switchRoom } = useWorld(sessions)
   const keys = useGameInput()
   const [currentRoomId, setCurrentRoomId] = useState('main-hall')
   const [spritesLoaded, setSpritesLoaded] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
 
-  const playerRef = useRef<Player | null>(null)
+  const playerRef = useRef<Player>(
+    createPlayer(5, 5, loadAppearance() ?? { palette: 0, hueShift: 0 })
+  )
   const cameraRef = useRef<Camera | null>(null)
   const transitionRef = useRef(createTransition())
   const roomDefsRef = useRef(createDefaultRooms())
@@ -38,6 +49,52 @@ export function App() {
     loadAllSprites().then(() => setSpritesLoaded(true))
   }, [])
 
+  const room = world.getCurrentRoom()
+  const currentCharacters = room ? room.officeState.getCharacters() : []
+
+  const interaction = useInteraction(sessions)
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === '?' || (e.code === 'Slash' && e.shiftKey)) {
+        setShowHelp(prev => !prev)
+      }
+      if (e.code === 'KeyE' || e.code === 'Space') {
+        if (!interaction.isOpen && sessions.length > 0) {
+          const p = playerRef.current
+          const chars = room?.officeState.getCharacters() ?? []
+          if (p && chars.length > 0) {
+            let targetId = getInteractTarget(p, chars)
+
+            if (targetId === null) {
+              let bestDist = 5
+              for (const ch of chars) {
+                const dx = Math.abs(ch.tileCol - p.tileCol)
+                const dy = Math.abs(ch.tileRow - p.tileRow)
+                const dist = dx + dy
+                if (dist > 0 && dist < bestDist) {
+                  bestDist = dist
+                  targetId = ch.id
+                }
+              }
+            }
+
+            if (targetId !== null) {
+              const sessionId = world.getSessionByCharacterId(targetId)
+              if (sessionId) {
+                interaction.openPanel(sessionId)
+              }
+            }
+          }
+        } else if (interaction.isOpen) {
+          interaction.closePanel()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [interaction, sessions, room, world])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !spritesLoaded) return
@@ -45,9 +102,6 @@ export function App() {
     const dpr = window.devicePixelRatio || 1
     const zoom = Math.round(dpr * ZOOM_DEFAULT_DPR_FACTOR)
 
-    if (!playerRef.current) {
-      playerRef.current = createPlayer(5, 5, { palette: 0, hueShift: 0 })
-    }
     if (!cameraRef.current) {
       cameraRef.current = new Camera(canvas.clientWidth, canvas.clientHeight)
       cameraRef.current.enableSmooth(0.1)
@@ -79,12 +133,13 @@ export function App() {
         }
 
         if (transition.state === 'none') {
-          const room = world.getCurrentRoom()
-          if (room) {
-            updatePlayer(player, keys, dt, room.officeState.tileMap, room.officeState.blockedTiles)
+          const currentRoom = world.getCurrentRoom()
+          if (currentRoom) {
+            const effectiveKeys = interaction.inputDisabled ? NO_KEYS : keys
+            updatePlayer(player, effectiveKeys, dt, currentRoom.officeState.tileMap, currentRoom.officeState.blockedTiles)
 
             const roomDef = roomDefsRef.current.find(r => r.id === world.getCurrentRoomId())
-            if (roomDef) {
+            if (roomDef && !interaction.inputDisabled) {
               const doorway = checkPlayerDoorway(player, roomDef.doorways)
               if (doorway) {
                 startTransition(
@@ -101,11 +156,11 @@ export function App() {
 
         updateWorld(dt)
 
-        const room = world.getCurrentRoom()
-        if (room) {
+        const currentRoom = world.getCurrentRoom()
+        if (currentRoom) {
           camera.setRoomBounds(
-            room.layout.cols * TILE_SIZE * zoom,
-            room.layout.rows * TILE_SIZE * zoom,
+            currentRoom.layout.cols * TILE_SIZE * zoom,
+            currentRoom.layout.rows * TILE_SIZE * zoom,
           )
           camera.follow(player.x * zoom, player.y * zoom)
           camera.update(dt)
@@ -113,24 +168,22 @@ export function App() {
       },
       render(ctx) {
         ctx.save()
-        ctx.scale(1, 1)
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
         ctx.fillStyle = '#0a0a14'
         ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height)
 
-        const room = world.getCurrentRoom()
-        if (!room) {
+        const currentRoom = world.getCurrentRoom()
+        if (!currentRoom) {
           ctx.restore()
           return
         }
 
-        const characters = room.officeState.getCharacters()
+        const agentChars = currentRoom.officeState.getCharacters()
+        const playerChar = playerToCharacter(player)
+        const allCharacters = [...agentChars, playerChar]
 
-        // renderFrame internally centers the map with (canvasW - mapW)/2.
-        // The camera also centers via clampX/clampY. Subtract renderFrame's
-        // centering so the camera is the sole source of positioning.
-        const mapW = room.layout.cols * TILE_SIZE * zoom
-        const mapH = room.layout.rows * TILE_SIZE * zoom
+        const mapW = currentRoom.layout.cols * TILE_SIZE * zoom
+        const mapH = currentRoom.layout.rows * TILE_SIZE * zoom
         const panX = -camera.x - Math.floor((ctx.canvas.width - mapW) / 2)
         const panY = -camera.y - Math.floor((ctx.canvas.height - mapH) / 2)
 
@@ -138,17 +191,17 @@ export function App() {
           ctx,
           ctx.canvas.width,
           ctx.canvas.height,
-          room.officeState.tileMap,
-          room.officeState.furniture,
-          characters,
+          currentRoom.officeState.tileMap,
+          currentRoom.officeState.furniture,
+          allCharacters,
           zoom,
           panX,
           panY,
           undefined,
           undefined,
-          room.layout.tileColors,
-          room.layout.cols,
-          room.layout.rows,
+          currentRoom.layout.tileColors,
+          currentRoom.layout.cols,
+          currentRoom.layout.rows,
         )
 
         const transition = transitionRef.current
@@ -166,7 +219,7 @@ export function App() {
       cleanup()
       window.removeEventListener('resize', resize)
     }
-  }, [spritesLoaded, world, updateWorld, keys])
+  }, [spritesLoaded, world, updateWorld, keys, interaction.inputDisabled])
 
   const handleSelectRoom = useCallback((roomId: string) => {
     const transition = transitionRef.current
@@ -182,12 +235,23 @@ export function App() {
     agentCount: sessions.filter(s => (s.room || 'main-hall') === r.id).length,
   }))
 
+  const currentRoomDef = roomDefsRef.current.find(r => r.id === currentRoomId)
+  const currentMessages = interaction.sessionId
+    ? chatMessages.get(interaction.sessionId) ?? []
+    : []
+
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
       <canvas
         ref={canvasRef}
         style={{ width: '100%', height: '100%', display: 'block', imageRendering: 'pixelated' }}
       />
+
+      <RoomIndicator
+        roomName={currentRoomDef?.name ?? 'Unknown'}
+        channelStatus={connected ? 'connected' : 'disconnected'}
+      />
+
       <div style={{
         position: 'absolute',
         top: 8,
@@ -201,11 +265,43 @@ export function App() {
       }}>
         {connected ? 'Connected' : 'Disconnected'}
       </div>
+
       <RoomSelector
         rooms={roomInfos}
         currentRoomId={currentRoomId}
         onSelectRoom={handleSelectRoom}
       />
+
+      {interaction.isOpen && interaction.currentSession && (
+        <InteractionPanel
+          session={interaction.currentSession}
+          activeTab={interaction.activeTab}
+          onTabChange={interaction.setTab}
+          onClose={interaction.closePanel}
+        >
+          {interaction.activeTab === 'status' && (
+            <StatusTab session={interaction.currentSession} />
+          )}
+          {interaction.activeTab === 'chat' && (
+            <ChatTab
+              session={interaction.currentSession}
+              onSendPrompt={sendPrompt}
+              onGetHistory={getHistory}
+              messages={currentMessages}
+            />
+          )}
+          {interaction.activeTab === 'actions' && (
+            <ActionsTab
+              session={interaction.currentSession}
+              onAbort={abortSession}
+              onClose={interaction.closePanel}
+            />
+          )}
+        </InteractionPanel>
+      )}
+
+      {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
+
       {!spritesLoaded && (
         <div style={{
           position: 'absolute',

@@ -154,6 +154,40 @@ export function getInteractTarget(
   return bestId
 }
 
+const PLAYER_CHARACTER_ID = -999
+
+export function playerToCharacter(player: Player): Character {
+  return {
+    id: PLAYER_CHARACTER_ID,
+    state: player.state,
+    dir: player.dir,
+    x: player.x,
+    y: player.y,
+    tileCol: player.tileCol,
+    tileRow: player.tileRow,
+    path: [],
+    moveProgress: 0,
+    currentTool: null,
+    palette: player.palette,
+    hueShift: player.hueShift,
+    frame: player.frame,
+    frameTimer: player.frameTimer,
+    wanderTimer: 0,
+    wanderCount: 0,
+    wanderLimit: 0,
+    isActive: false,
+    seatId: null,
+    bubbleType: null,
+    bubbleTimer: 0,
+    seatTimer: 0,
+    isSubagent: false,
+    parentAgentId: null,
+    matrixEffect: null,
+    matrixEffectTimer: 0,
+    matrixEffectSeeds: [],
+  }
+}
+
 const APPEARANCE_KEY = 'pixel-claw-player-appearance'
 
 export function saveAppearance(appearance: PlayerAppearance): void {

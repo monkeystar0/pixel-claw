@@ -40,6 +40,7 @@ export function useWebSocket() {
   const [connected, setConnected] = useState(false);
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
+  const [chatMessages, setChatMessages] = useState<Map<string, ChatMessage[]>>(new Map());
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttempt = useRef(0);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -76,6 +77,27 @@ export function useWebSocket() {
       case 'channels:updated':
         setChannels(data.channels as ChannelInfo[]);
         break;
+      case 'session:history': {
+        const sid = data.sessionId as string;
+        const msgs = data.messages as ChatMessage[];
+        setChatMessages(prev => {
+          const next = new Map(prev);
+          next.set(sid, msgs);
+          return next;
+        });
+        break;
+      }
+      case 'session:chatEvent': {
+        const sid = data.sessionId as string;
+        const msg = data.message as ChatMessage;
+        setChatMessages(prev => {
+          const next = new Map(prev);
+          const existing = next.get(sid) ?? [];
+          next.set(sid, [...existing, msg]);
+          return next;
+        });
+        break;
+      }
     }
   }, []);
 
@@ -150,6 +172,7 @@ export function useWebSocket() {
     connected,
     sessions,
     channels,
+    chatMessages,
     sendPrompt,
     abortSession,
     getHistory,

@@ -115,6 +115,13 @@ export class WorldState {
     }
   }
 
+  getSessionByCharacterId(charId: number): string | null {
+    for (const m of this.agentMap.values()) {
+      if (m.characterId === charId) return m.sessionId
+    }
+    return null
+  }
+
   getAllSessions(): Array<{ sessionId: string; roomId: string }> {
     return Array.from(this.agentMap.values()).map(m => ({
       sessionId: m.sessionId,

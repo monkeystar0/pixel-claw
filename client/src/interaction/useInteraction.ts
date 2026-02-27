@@ -1,7 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
-import type { Player } from '../world/engine/player.js'
-import { getInteractTarget } from '../world/engine/player.js'
-import type { Character } from '../world/types.js'
+import { useState, useCallback, useEffect } from 'react'
 import type { SessionData } from '../hooks/useWebSocket.js'
 
 export type InteractionTab = 'status' | 'chat' | 'actions'
@@ -12,58 +9,12 @@ export interface InteractionState {
   isOpen: boolean
 }
 
-export function useInteraction(
-  player: Player | null,
-  characters: Character[],
-  sessions: SessionData[],
-  interactKeyPressed: boolean,
-) {
+export function useInteraction(sessions: SessionData[]) {
   const [state, setState] = useState<InteractionState>({
     sessionId: null,
     activeTab: 'status',
     isOpen: false,
   })
-
-  const prevInteractRef = useRef(false)
-  const sessionMapRef = useRef(new Map<number, string>())
-
-  useEffect(() => {
-    const map = new Map<number, string>()
-    for (const s of sessions) {
-      const charId = characters.find(c => c.id > 0)?.id
-      if (charId !== undefined) {
-        map.set(charId, s.sessionId)
-      }
-    }
-    sessionMapRef.current = map
-  }, [sessions, characters])
-
-  const interactTargetId = player ? getInteractTarget(player, characters) : null
-
-  useEffect(() => {
-    const justPressed = interactKeyPressed && !prevInteractRef.current
-    prevInteractRef.current = interactKeyPressed
-
-    if (!justPressed) return
-
-    if (state.isOpen) {
-      setState(prev => ({ ...prev, isOpen: false, sessionId: null }))
-      return
-    }
-
-    if (interactTargetId !== null) {
-      const matchingSession = sessions.find(s => {
-        return true
-      })
-      if (matchingSession) {
-        setState({
-          sessionId: matchingSession.sessionId,
-          activeTab: 'status',
-          isOpen: true,
-        })
-      }
-    }
-  }, [interactKeyPressed, state.isOpen, interactTargetId, sessions])
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -93,7 +44,6 @@ export function useInteraction(
 
   return {
     ...state,
-    interactTargetId,
     currentSession,
     setTab,
     closePanel,

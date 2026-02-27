@@ -125,8 +125,14 @@ export function App() {
         }
 
         const characters = room.officeState.getCharacters()
-        const panX = -camera.x
-        const panY = -camera.y
+
+        // renderFrame internally centers the map with (canvasW - mapW)/2.
+        // The camera also centers via clampX/clampY. Subtract renderFrame's
+        // centering so the camera is the sole source of positioning.
+        const mapW = room.layout.cols * TILE_SIZE * zoom
+        const mapH = room.layout.rows * TILE_SIZE * zoom
+        const panX = -camera.x - Math.floor((ctx.canvas.width - mapW) / 2)
+        const panY = -camera.y - Math.floor((ctx.canvas.height - mapH) / 2)
 
         renderFrame(
           ctx,

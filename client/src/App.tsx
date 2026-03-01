@@ -3,8 +3,8 @@ import { useWebSocket } from './hooks/useWebSocket.js'
 import { useWorld } from './hooks/useWorld.js'
 import { useGameInput } from './hooks/useGameInput.js'
 import { useInteraction } from './interaction/useInteraction.js'
-import { createPlayer, updatePlayer, playerToCharacter, loadAppearance, getInteractTarget } from './world/engine/player.js'
-import type { Player } from './world/engine/player.js'
+import { createPlayer, updatePlayer, playerToCharacter, loadAppearance, getInteractTarget, getInteractFurniture } from './world/engine/player.js'
+import type { Player, PlayerAppearance } from './world/engine/player.js'
 import { Camera } from './world/engine/camera.js'
 import { startGameLoop } from './world/engine/gameLoop.js'
 import { renderFrame } from './world/engine/renderer.js'
@@ -26,7 +26,8 @@ import { RoomIndicator } from './ui/RoomIndicator.js'
 import { HelpOverlay } from './ui/HelpOverlay.js'
 import { MonitorOverlay } from './ui/MonitorOverlay.js'
 import { MonitorButton } from './ui/MonitorButton.js'
-import { TILE_SIZE } from './world/types.js'
+import { WardrobePanel } from './interaction/WardrobePanel.js'
+import { TILE_SIZE, FurnitureType } from './world/types.js'
 import { ZOOM_DEFAULT_DPR_FACTOR } from './world/constants.js'
 
 const NO_KEYS = { up: false, down: false, left: false, right: false, interact: false }
@@ -44,6 +45,9 @@ export function App() {
   const [spritesLoaded, setSpritesLoaded] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [showMonitor, setShowMonitor] = useState(false)
+  const [showWardrobe, setShowWardrobe] = useState(false)
+  const showWardrobeRef = useRef(showWardrobe)
+  showWardrobeRef.current = showWardrobe
 
   const playerRef = useRef<Player>(
     createPlayer(5, 5, loadAppearance() ?? { palette: 0, hueShift: 0 })
@@ -56,8 +60,8 @@ export function App() {
     loadAllSprites().then(() => setSpritesLoaded(true))
   }, [])
 
-  const inputDisabledRef = useRef(interaction.inputDisabled)
-  inputDisabledRef.current = interaction.inputDisabled
+  const inputDisabledRef = useRef(interaction.inputDisabled || showWardrobe)
+  inputDisabledRef.current = interaction.inputDisabled || showWardrobe
 
   const interactionRef = useRef(interaction)
   interactionRef.current = interaction
@@ -71,15 +75,27 @@ export function App() {
       if (e.key === '?' || (e.code === 'Slash' && e.shiftKey)) {
         setShowHelp(prev => !prev)
       }
+      if (e.code === 'Escape' && showWardrobeRef.current) {
+        setShowWardrobe(false)
+        return
+      }
       if (e.code === 'KeyM' && !isTyping) {
         setShowMonitor(prev => !prev)
       }
       if (e.code === 'KeyE' || e.code === 'Space') {
         const inter = interactionRef.current
-        if (!inter.isOpen && sessionsRef.current.length > 0) {
+
+        if (showWardrobeRef.current) {
+          setShowWardrobe(false)
+          return
+        }
+
+        if (!inter.isOpen) {
           const p = playerRef.current
           const currentRoom = world.getCurrentRoom()
           const chars = currentRoom?.officeState.getCharacters() ?? []
+
+          let agentFound = false
           if (p && chars.length > 0) {
             let targetId = getInteractTarget(p, chars)
 
@@ -100,7 +116,19 @@ export function App() {
               const sessionId = world.getSessionByCharacterId(targetId)
               if (sessionId) {
                 inter.openPanel(sessionId)
+                agentFound = true
               }
+            }
+          }
+
+          if (!agentFound && p && currentRoom) {
+            const wardrobeHit = getInteractFurniture(
+              p,
+              currentRoom.layout.furniture,
+              FurnitureType.WARDROBE,
+            )
+            if (wardrobeHit) {
+              setShowWardrobe(true)
             }
           }
         } else if (inter.isOpen) {
@@ -245,6 +273,12 @@ export function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spritesLoaded, world, updateWorld])
 
+  const handleAppearanceChange = useCallback((appearance: PlayerAppearance) => {
+    const p = playerRef.current
+    p.palette = appearance.palette
+    p.hueShift = appearance.hueShift
+  }, [])
+
   const handleSelectRoom = useCallback((roomId: string) => {
     const transition = transitionRef.current
     if (transition.state !== 'none') return
@@ -344,6 +378,14 @@ export function App() {
           gatewayConnected={gatewayConnected}
           gatewayLog={gatewayLog}
           onClose={() => setShowMonitor(false)}
+        />
+      )}
+
+      {showWardrobe && (
+        <WardrobePanel
+          appearance={{ palette: playerRef.current.palette, hueShift: playerRef.current.hueShift }}
+          onChangeAppearance={handleAppearanceChange}
+          onClose={() => setShowWardrobe(false)}
         />
       )}
 

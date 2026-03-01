@@ -272,6 +272,72 @@ export const LAMP_SPRITE: SpriteData = (() => {
   ]
 })()
 
+/** Wardrobe: 32x48 pixels (2x3 tiles) — fallback wooden wardrobe with doors and base */
+export const WARDROBE_SPRITE: SpriteData = (() => {
+  const W = '#8B6914'
+  const D = '#6B4F0E'
+  const L = '#C8A250'
+  const F = '#A07830'
+  const P = '#D4B878'
+  const B = '#3A2A0A'
+  const K = '#5A3C14'
+  return [
+    // Row 0-3: Top header panel
+    [_, _, _, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, _, _, _],
+    [_, _, _, B, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, P, B, _, _, _],
+    [_, _, _, B, P, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, L, P, B, _, _, _],
+    [_, _, _, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, _, _, _],
+    // Row 4-20: Door panels
+    [_, _, _, B, W, W, W, W, W, W, W, W, W, W, W, B, W, W, W, W, W, W, W, W, W, W, W, W, B, _, _, _],
+    [_, _, _, B, W, F, F, F, F, F, F, F, F, F, W, B, W, F, F, F, F, F, F, F, F, F, F, W, B, _, _, _],
+    [_, _, _, B, W, F, L, L, L, L, L, L, L, F, W, B, W, F, L, L, L, L, L, L, L, F, F, W, B, _, _, _],
+    [_, _, _, B, W, F, L, F, F, F, F, F, L, F, W, B, W, F, L, F, F, F, F, F, L, F, F, W, B, _, _, _],
+    [_, _, _, B, W, F, L, F, F, F, F, F, L, F, W, B, W, F, L, F, F, F, F, F, L, F, F, W, B, _, _, _],
+    [_, _, _, B, W, F, L, F, F, F, F, F, L, F, W, B, W, F, L, F, F, F, F, F, L, F, F, W, B, _, _, _],
+    [_, _, _, B, W, F, L, F, F, F, F, F, L, F, W, B, W, F, L, F, F, F, F, F, L, F, F, W, B, _, _, _],
+    [_, _, _, B, W, F, L, F, F, F, F, F, L, F, W, B, W, F, L, F, F, F, F, F, L, F, F, W, B, _, _, _],
+    [_, _, _, B, W, F, L, F, F, F, D, F, L, F, W, B, W, F, L, F, F, D, F, F, L, F, F, W, B, _, _, _],
+    [_, _, _, B, W, F, L, F, F, F, F, F, L, F, W, B, W, F, L, F, F, F, F, F, L, F, F, W, B, _, _, _],
+    [_, _, _, B, W, F, L, F, F, F, F, F, L, F, W, B, W, F, L, F, F, F, F, F, L, F, F, W, B, _, _, _],
+    [_, _, _, B, W, F, L, F, F, F, F, F, L, F, W, B, W, F, L, F, F, F, F, F, L, F, F, W, B, _, _, _],
+    [_, _, _, B, W, F, L, F, F, F, F, F, L, F, W, B, W, F, L, F, F, F, F, F, L, F, F, W, B, _, _, _],
+    [_, _, _, B, W, F, L, F, F, F, F, F, L, F, W, B, W, F, L, F, F, F, F, F, L, F, F, W, B, _, _, _],
+    [_, _, _, B, W, F, L, L, L, L, L, L, L, F, W, B, W, F, L, L, L, L, L, L, L, F, F, W, B, _, _, _],
+    [_, _, _, B, W, F, F, F, F, F, F, F, F, F, W, B, W, F, F, F, F, F, F, F, F, F, F, W, B, _, _, _],
+    [_, _, _, B, W, W, W, W, W, W, W, W, W, W, W, B, W, W, W, W, W, W, W, W, W, W, W, W, B, _, _, _],
+    // Row 21-24: Lower door section
+    [_, _, _, B, W, W, W, W, W, W, W, W, W, W, W, B, W, W, W, W, W, W, W, W, W, W, W, W, B, _, _, _],
+    [_, _, _, B, D, D, D, D, D, D, D, D, D, D, D, B, D, D, D, D, D, D, D, D, D, D, D, D, B, _, _, _],
+    [_, _, _, B, D, D, D, D, D, D, D, D, D, D, D, B, D, D, D, D, D, D, D, D, D, D, D, D, B, _, _, _],
+    [_, _, _, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, _, _, _],
+    // Row 25-31: Transition and lower body
+    [_, _, _, B, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, B, _, _, _],
+    [_, _, _, B, D, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, D, B, _, _, _],
+    [_, _, _, B, D, K, F, F, F, F, F, F, F, F, F, K, K, F, F, F, F, F, F, F, F, F, K, D, B, _, _, _],
+    [_, _, _, B, D, K, F, F, F, F, F, F, F, F, F, K, K, F, F, F, F, F, F, F, F, F, K, D, B, _, _, _],
+    [_, _, _, B, D, K, F, F, F, F, F, F, F, F, F, K, K, F, F, F, F, F, F, F, F, F, K, D, B, _, _, _],
+    [_, _, _, B, D, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, D, B, _, _, _],
+    [_, _, _, B, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, B, _, _, _],
+    // Row 32-47: Base/feet section
+    [_, _, _, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, _, _, _],
+    [_, _, _, B, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, B, _, _, _],
+    [_, _, _, B, D, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, D, B, _, _, _],
+    [_, _, _, B, D, K, W, W, W, W, W, W, W, W, W, K, K, W, W, W, W, W, W, W, W, W, K, D, B, _, _, _],
+    [_, _, _, B, D, K, W, W, W, W, W, W, W, W, W, K, K, W, W, W, W, W, W, W, W, W, K, D, B, _, _, _],
+    [_, _, _, B, D, K, W, W, W, W, W, W, W, W, W, K, K, W, W, W, W, W, W, W, W, W, K, D, B, _, _, _],
+    [_, _, _, B, D, K, W, W, W, W, W, W, W, W, W, K, K, W, W, W, W, W, W, W, W, W, K, D, B, _, _, _],
+    [_, _, _, B, D, K, W, W, W, W, W, W, W, W, W, K, K, W, W, W, W, W, W, W, W, W, K, D, B, _, _, _],
+    [_, _, _, B, D, K, W, W, W, W, W, W, W, W, W, K, K, W, W, W, W, W, W, W, W, W, K, D, B, _, _, _],
+    [_, _, _, B, D, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, K, D, B, _, _, _],
+    [_, _, _, B, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, D, B, _, _, _],
+    [_, _, _, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, B, _, _, _],
+    [_, _, _, B, D, D, D, D, D, D, D, B, _, _, _, _, _, _, _, _, B, D, D, D, D, D, D, D, B, _, _, _],
+    [_, _, _, B, D, D, D, D, D, D, D, B, _, _, _, _, _, _, _, _, B, D, D, D, D, D, D, D, B, _, _, _],
+    [_, _, _, B, B, B, B, B, B, B, B, B, _, _, _, _, _, _, _, _, B, B, B, B, B, B, B, B, B, _, _, _],
+    [_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _],
+  ]
+})()
+
 // ── Speech Bubble Sprites ───────────────────────────────────────
 
 /** Permission bubble: white square with "..." in amber, and a tail pointer (11x13) */

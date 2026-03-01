@@ -4,8 +4,9 @@ interface HelpOverlayProps {
 
 const controls = [
   { key: 'WASD / Arrows', desc: 'Move character' },
-  { key: 'E / Space', desc: 'Interact with agent' },
+  { key: 'E / Space', desc: 'Interact with agent / wardrobe' },
   { key: 'Escape', desc: 'Close panel' },
+  { key: 'M', desc: 'Toggle monitoring overlay' },
   { key: '?', desc: 'Toggle this help' },
 ]
 

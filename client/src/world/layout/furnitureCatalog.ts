@@ -1,5 +1,6 @@
 import { FurnitureType } from '../types.js'
 import type { FurnitureCatalogEntry, SpriteData } from '../types.js'
+import { getFurnitureTilesetSprite } from '../sprites/spriteLoader.js'
 import {
   DESK_SQUARE_SPRITE,
   BOOKSHELF_SPRITE,
@@ -9,6 +10,7 @@ import {
   CHAIR_SPRITE,
   PC_SPRITE,
   LAMP_SPRITE,
+  WARDROBE_SPRITE,
 } from '../sprites/spriteData.js'
 
 export interface LoadedAssetData {
@@ -46,6 +48,7 @@ export const FURNITURE_CATALOG: CatalogEntryWithCategory[] = [
   { type: FurnitureType.CHAIR,      label: 'Chair',      footprintW: 1, footprintH: 1, sprite: CHAIR_SPRITE,        isDesk: false, category: 'chairs' },
   { type: FurnitureType.PC,         label: 'PC',         footprintW: 1, footprintH: 1, sprite: PC_SPRITE,           isDesk: false, category: 'electronics', canPlaceOnSurfaces: true },
   { type: FurnitureType.LAMP,       label: 'Lamp',       footprintW: 1, footprintH: 1, sprite: LAMP_SPRITE,         isDesk: false, category: 'decor', canPlaceOnSurfaces: true },
+  { type: FurnitureType.WARDROBE,   label: 'Wardrobe',   footprintW: 2, footprintH: 3, sprite: WARDROBE_SPRITE,     isDesk: false, category: 'storage', backgroundTiles: 1 },
 ]
 
 // ── Rotation groups ──────────────────────────────────────────────
@@ -233,12 +236,23 @@ export function buildDynamicCatalog(assets: LoadedAssetData): boolean {
   return true
 }
 
+const TILESET_SPRITE_TYPES = new Set(['wardrobe'])
+
 export function getCatalogEntry(type: string): CatalogEntryWithCategory | undefined {
   if (internalCatalog) {
     return internalCatalog.find((e) => e.type === type)
   }
   const catalog = dynamicCatalog || FURNITURE_CATALOG
-  return catalog.find((e) => e.type === type)
+  const entry = catalog.find((e) => e.type === type)
+  if (!entry) return undefined
+
+  if (TILESET_SPRITE_TYPES.has(type)) {
+    const tilesetSprite = getFurnitureTilesetSprite(type)
+    if (tilesetSprite) {
+      return { ...entry, sprite: tilesetSprite }
+    }
+  }
+  return entry
 }
 
 export function getCatalogByCategory(category: FurnitureCategory): CatalogEntryWithCategory[] {

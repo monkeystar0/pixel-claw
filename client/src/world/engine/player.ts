@@ -1,6 +1,7 @@
 import { Direction, CharacterState, TILE_SIZE } from '../types.js'
-import type { Character, TileType as TileTypeVal } from '../types.js'
+import type { Character, TileType as TileTypeVal, PlacedFurniture } from '../types.js'
 import { isWalkable } from '../layout/tileMap.js'
+import { getCatalogEntry } from '../layout/furnitureCatalog.js'
 import { WALK_SPEED_PX_PER_SEC, WALK_FRAME_DURATION_SEC } from '../constants.js'
 
 const INTERACT_RANGE_TILES = 2
@@ -152,6 +153,73 @@ export function getInteractTarget(
   }
 
   return bestId
+}
+
+/**
+ * Find the nearest interactable furniture in the player's facing direction.
+ * Returns the PlacedFurniture if found within INTERACT_RANGE_TILES, or null.
+ */
+export function getInteractFurniture(
+  player: Player,
+  furniture: PlacedFurniture[],
+  targetType: string,
+): PlacedFurniture | null {
+  const { dc, dr } = facingDelta(player.dir)
+  let best: PlacedFurniture | null = null
+  let bestDist = Infinity
+
+  for (const item of furniture) {
+    if (item.type !== targetType) continue
+    const entry = getCatalogEntry(item.type)
+    if (!entry) continue
+
+    for (let fr = 0; fr < entry.footprintH; fr++) {
+      for (let fc = 0; fc < entry.footprintW; fc++) {
+        const tileCol = item.col + fc
+        const tileRow = item.row + fr
+        const dtc = tileCol - player.tileCol
+        const dtr = tileRow - player.tileRow
+        const dist = Math.abs(dtc) + Math.abs(dtr)
+        if (dist > INTERACT_RANGE_TILES || dist === 0) continue
+
+        const inDirection =
+          (dc !== 0 && Math.sign(dtc) === dc && Math.abs(dtr) <= 1) ||
+          (dr !== 0 && Math.sign(dtr) === dr && Math.abs(dtc) <= 1)
+
+        if (!inDirection) continue
+
+        if (dist < bestDist) {
+          bestDist = dist
+          best = item
+        }
+      }
+    }
+  }
+
+  if (best) return best
+
+  let fallbackDist = INTERACT_RANGE_TILES + 2
+  for (const item of furniture) {
+    if (item.type !== targetType) continue
+    const entry = getCatalogEntry(item.type)
+    if (!entry) continue
+
+    for (let fr = 0; fr < entry.footprintH; fr++) {
+      for (let fc = 0; fc < entry.footprintW; fc++) {
+        const tileCol = item.col + fc
+        const tileRow = item.row + fr
+        const dtc = tileCol - player.tileCol
+        const dtr = tileRow - player.tileRow
+        const dist = Math.abs(dtc) + Math.abs(dtr)
+        if (dist > 0 && dist < fallbackDist) {
+          fallbackDist = dist
+          best = item
+        }
+      }
+    }
+  }
+
+  return best
 }
 
 export const PLAYER_CHARACTER_ID = -999

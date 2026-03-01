@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="pixel-claw.png" alt="pixel-claw" width="200" />
+</p>
+
 # pixel-claw
 
 [![GitHub stars](https://img.shields.io/github/stars/monkeystar0/pixel-claw?style=flat-square)](https://github.com/monkeystar0/pixel-claw/stargazers)
@@ -14,8 +18,8 @@ Visualize OpenClaw agent sessions as interactive pixel art characters in a multi
 - **Player character** — Walk around with WASD, interact with agents via proximity
 - **Interaction panel** — Status tab (session details), Chat tab (prompt/response), Actions tab (abort/reset)
 - **Agent monitoring system** — Real-time dashboard (press M) showing gateway status, channel connectivity, session list with token usage, and live activity feed from `gateway.log`
+- **Wardrobe** — Walk up to the wardrobe in the Main Hall and press E to customize your character's skin palette and hue
 - **Bubble animations** — Thinking/working bubbles on agents when active, done bubble on completion
-- **Wardrobe** — Customize player appearance with palette and hue shift
 - **Matrix effects** — Spawn/despawn animations for agents joining and leaving
 - **Canvas 2D rendering** — Pixel-perfect sprite rendering with z-sorting, camera following, and zoom
 - **WebSocket real-time sync** — Backend watches OpenClaw session files and pushes updates to browser

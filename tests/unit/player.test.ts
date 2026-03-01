@@ -3,10 +3,11 @@ import {
   createPlayer,
   updatePlayer,
   getInteractTarget,
+  getInteractFurniture,
 } from '../../client/src/world/engine/player.js'
 import type { Player, PlayerAppearance } from '../../client/src/world/engine/player.js'
-import { Direction, CharacterState, TileType, TILE_SIZE } from '../../client/src/world/types.js'
-import type { Character, TileType as TileTypeVal } from '../../client/src/world/types.js'
+import { Direction, CharacterState, TileType, TILE_SIZE, FurnitureType } from '../../client/src/world/types.js'
+import type { Character, TileType as TileTypeVal, PlacedFurniture } from '../../client/src/world/types.js'
 
 function makeSimpleTileMap(rows: number, cols: number): TileTypeVal[][] {
   const map: TileTypeVal[][] = []
@@ -288,6 +289,50 @@ describe('Player', () => {
       })
       const target = getInteractTarget(player, [makeAgent(2, 7), makeAgent(1, 6)])
       expect(target).toBe(1)
+    })
+  })
+
+  describe('getInteractFurniture', () => {
+    it('should find wardrobe within range when facing it', () => {
+      const player = createPlayer(2, 5, defaultAppearance)
+      player.dir = Direction.UP
+      const furniture: PlacedFurniture[] = [
+        { uid: 'w1', type: FurnitureType.WARDROBE, col: 1, row: 3 },
+      ]
+      const result = getInteractFurniture(player, furniture, FurnitureType.WARDROBE)
+      expect(result).not.toBeNull()
+      expect(result!.uid).toBe('w1')
+    })
+
+    it('should return null when no wardrobe in range', () => {
+      const player = createPlayer(5, 5, defaultAppearance)
+      player.dir = Direction.UP
+      const furniture: PlacedFurniture[] = [
+        { uid: 'w1', type: FurnitureType.WARDROBE, col: 1, row: 1 },
+      ]
+      const result = getInteractFurniture(player, furniture, FurnitureType.WARDROBE)
+      expect(result).toBeNull()
+    })
+
+    it('should ignore non-matching furniture types', () => {
+      const player = createPlayer(2, 3, defaultAppearance)
+      player.dir = Direction.RIGHT
+      const furniture: PlacedFurniture[] = [
+        { uid: 'd1', type: FurnitureType.DESK, col: 3, row: 3 },
+      ]
+      const result = getInteractFurniture(player, furniture, FurnitureType.WARDROBE)
+      expect(result).toBeNull()
+    })
+
+    it('should use fallback distance when not facing furniture', () => {
+      const player = createPlayer(2, 5, defaultAppearance)
+      player.dir = Direction.LEFT
+      const furniture: PlacedFurniture[] = [
+        { uid: 'w1', type: FurnitureType.WARDROBE, col: 1, row: 3 },
+      ]
+      const result = getInteractFurniture(player, furniture, FurnitureType.WARDROBE)
+      expect(result).not.toBeNull()
+      expect(result!.uid).toBe('w1')
     })
   })
 

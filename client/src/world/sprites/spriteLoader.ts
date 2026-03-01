@@ -191,10 +191,11 @@ export function getFurnitureTilesetSprite(key: string): SpriteData | null {
  * Call once on application startup.
  */
 export async function loadAllSprites(basePath = '/sprites'): Promise<void> {
-  const [wallSprites, charSprites, floorSprites] = await Promise.all([
+  const [wallSprites, charSprites, floorSprites, furnitureSprites] = await Promise.all([
     loadWallSprites(basePath),
     loadCharacterSprites(basePath),
     loadFloorTileSprites(basePath),
+    loadFurnitureTilesetSprites(basePath),
   ])
 
   if (wallSprites.length > 0) {
@@ -207,5 +208,9 @@ export async function loadAllSprites(basePath = '/sprites'): Promise<void> {
 
   if (floorSprites.length > 0) {
     setFloorSprites(floorSprites)
+  }
+
+  if (furnitureSprites.size > 0) {
+    loadedFurnitureSprites = furnitureSprites
   }
 }

@@ -268,7 +268,6 @@ export function createMainHallLayout(): OfficeLayout {
     { uid: 'mh-ch-l3', type: FurnitureType.CHAIR, col: 6, row: 2 },
     { uid: 'mh-ch-l4', type: FurnitureType.CHAIR, col: 5, row: 4 },
     { uid: 'mh-pc-l', type: FurnitureType.PC, col: 5, row: 2 },
-    { uid: 'mh-bs-1', type: FurnitureType.BOOKSHELF, col: 1, row: 5 },
     { uid: 'mh-pl-1', type: FurnitureType.PLANT, col: 1, row: 1 },
     { uid: 'mh-pl-2', type: FurnitureType.PLANT, col: 9, row: 1 },
     { uid: 'mh-pl-5', type: FurnitureType.PLANT, col: 8, row: 8 },
@@ -276,6 +275,9 @@ export function createMainHallLayout(): OfficeLayout {
     { uid: 'mh-cl', type: FurnitureType.COOLER, col: 9, row: 9 },
     { uid: 'mh-ch-lg1', type: FurnitureType.CHAIR, col: 3, row: 8 },
     { uid: 'mh-ch-lg2', type: FurnitureType.CHAIR, col: 5, row: 8 },
+
+    // ── Wardrobe (player customization) ──
+    { uid: 'mh-wardrobe', type: FurnitureType.WARDROBE, col: 1, row: 3 },
 
     // ── Right side (tech hub — 4 workstations) ──
     // Station 1: top-left

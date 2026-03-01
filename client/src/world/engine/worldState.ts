@@ -107,6 +107,33 @@ export class WorldState {
     }
   }
 
+  showAgentThinkingBubble(sessionId: string): void {
+    const mapping = this.agentMap.get(sessionId)
+    if (!mapping) return
+    const room = this.rooms.get(mapping.roomId)
+    if (room) {
+      room.officeState.showThinkingBubble(mapping.characterId)
+    }
+  }
+
+  dismissAgentBubble(sessionId: string): void {
+    const mapping = this.agentMap.get(sessionId)
+    if (!mapping) return
+    const room = this.rooms.get(mapping.roomId)
+    if (room) {
+      room.officeState.dismissBubble(mapping.characterId)
+    }
+  }
+
+  showAgentDoneBubble(sessionId: string): void {
+    const mapping = this.agentMap.get(sessionId)
+    if (!mapping) return
+    const room = this.rooms.get(mapping.roomId)
+    if (room) {
+      room.officeState.showWaitingBubble(mapping.characterId)
+    }
+  }
+
   update(dt: number): void {
     if (!this.currentRoomId) return
     const room = this.rooms.get(this.currentRoomId)

@@ -139,7 +139,7 @@ export interface Character {
   wanderLimit: number
   isActive: boolean
   seatId: string | null
-  bubbleType: 'permission' | 'waiting' | null
+  bubbleType: 'permission' | 'waiting' | 'thinking' | null
   bubbleTimer: number
   seatTimer: number
   isSubagent: boolean

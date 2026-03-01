@@ -3,7 +3,22 @@ import { WorldState } from '../world/engine/worldState.js'
 import { createDefaultRooms } from '../world/engine/rooms.js'
 import type { SessionData } from './useWebSocket.js'
 
-export function useWorld(sessions: SessionData[]) {
+const CHANNEL_PROVIDERS = new Set(['slack', 'discord', 'telegram', 'whatsapp'])
+
+const CHANNEL_KEY_PATTERN = /^agent:[^:]+:(slack|discord|telegram|whatsapp):/i
+
+function isChannelSession(session: SessionData): boolean {
+  if (session.sessionAlias && CHANNEL_KEY_PATTERN.test(session.sessionAlias)) {
+    return true
+  }
+  return !!session.origin?.provider && CHANNEL_PROVIDERS.has(session.origin.provider.toLowerCase())
+}
+
+function shouldBeVisible(session: SessionData): boolean {
+  return session.status === 'running' || session.sessionAlias === 'global' || isChannelSession(session)
+}
+
+export function useWorld(sessions: SessionData[], openPanelSessionId: string | null = null) {
   const worldRef = useRef<WorldState | null>(null)
 
   if (!worldRef.current) {
@@ -23,6 +38,9 @@ export function useWorld(sessions: SessionData[]) {
     const currentIds = new Set<string>()
 
     for (const session of sessions) {
+      if (!shouldBeVisible(session)) continue
+
+      const isRunning = session.status === 'running'
       currentIds.add(session.sessionId)
       const prev = prevMap.get(session.sessionId)
 
@@ -32,9 +50,19 @@ export function useWorld(sessions: SessionData[]) {
         world.addAgent(session.sessionId, validRoom)
       }
 
-      const isRunning = session.status === 'running'
       world.setAgentActive(session.sessionId, isRunning)
       world.setAgentTool(session.sessionId, session.currentTool)
+
+      const panelOpenForThis = openPanelSessionId === session.sessionId
+      const prevSession = prev
+
+      if (panelOpenForThis) {
+        world.dismissAgentBubble(session.sessionId)
+      } else if (isRunning) {
+        world.showAgentThinkingBubble(session.sessionId)
+      } else if (prevSession && prevSession.status === 'running' && !isRunning) {
+        world.showAgentDoneBubble(session.sessionId)
+      }
     }
 
     for (const [sessionId] of prevMap) {
@@ -45,10 +73,12 @@ export function useWorld(sessions: SessionData[]) {
 
     const newMap = new Map<string, SessionData>()
     for (const s of sessions) {
-      newMap.set(s.sessionId, s)
+      if (shouldBeVisible(s)) {
+        newMap.set(s.sessionId, s)
+      }
     }
     prevSessionsRef.current = newMap
-  }, [sessions, world])
+  }, [sessions, world, openPanelSessionId])
 
   const update = useCallback((dt: number) => {
     world.update(dt)

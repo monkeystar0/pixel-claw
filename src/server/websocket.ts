@@ -1,6 +1,7 @@
 import type { WebSocket } from 'ws';
 import type { SessionManager } from '../services/sessionManager.js';
 import type { SessionData, ChannelInfo } from '../openclaw/types.js';
+import type { GatewayLogReader, GatewayLogEntry } from '../openclaw/gatewayLogReader.js';
 
 function send(ws: WebSocket, data: Record<string, unknown>): void {
   if (ws.readyState === ws.OPEN) {
@@ -35,10 +36,13 @@ function handleIncoming(ws: WebSocket, manager: SessionManager): void {
       case 'session:sendPrompt': {
         const sessionId = data.sessionId as string;
         const message = data.message as string;
+        console.log(`[ws] sendPrompt → session=${sessionId} msg="${message.substring(0, 60)}"`);
         try {
           const result = await manager.sendPrompt(sessionId, message);
+          console.log(`[ws] promptAck ok → runId=${result.runId}`);
           send(ws, { type: 'session:promptAck', sessionId, runId: result.runId, ok: true });
         } catch (err) {
+          console.error(`[ws] sendPrompt error →`, String(err));
           send(ws, { type: 'session:promptAck', sessionId, ok: false, error: String(err) });
         }
         break;
@@ -55,6 +59,18 @@ function handleIncoming(ws: WebSocket, manager: SessionManager): void {
         }
         break;
       }
+
+      case 'session:resetSession': {
+        const sessionId = data.sessionId as string;
+        try {
+          const result = await manager.resetSession(sessionId);
+          send(ws, { type: 'session:resetAck', sessionId, runId: result.runId, ok: true });
+        } catch (err) {
+          console.error(`[ws] resetSession error →`, String(err));
+          send(ws, { type: 'session:resetAck', sessionId, ok: false, error: String(err) });
+        }
+        break;
+      }
     }
   });
 }
@@ -62,6 +78,7 @@ function handleIncoming(ws: WebSocket, manager: SessionManager): void {
 export function setupWebSocketHandler(
   manager: SessionManager,
   clients: Set<WebSocket>,
+  logReader?: GatewayLogReader,
 ): (ws: WebSocket) => void {
   manager.on('session:added', (session: SessionData) => {
     broadcast(clients, { type: 'session:added', session });
@@ -80,14 +97,30 @@ export function setupWebSocketHandler(
   });
 
   manager.on('chat:event', (data: Record<string, unknown>) => {
-    broadcast(clients, { type: 'chat:event', ...data });
+    console.log(`[ws] broadcasting chatEvent → session=${data.sessionId} state=${data.state}`);
+    broadcast(clients, { type: 'session:chatEvent', ...data });
   });
+
+  manager.on('gateway:status', (connected: boolean) => {
+    broadcast(clients, { type: 'gateway:status', connected });
+  });
+
+  if (logReader) {
+    logReader.on('entry', (entry: GatewayLogEntry) => {
+      broadcast(clients, { type: 'activityLog:entry', entry });
+    });
+  }
 
   return (ws: WebSocket) => {
     clients.add(ws);
 
     send(ws, { type: 'sessions:sync', sessions: manager.getSessions() });
     send(ws, { type: 'channels:sync', channels: manager.getChannels() });
+    send(ws, { type: 'gateway:status', connected: manager.isGatewayConnected() });
+
+    if (logReader) {
+      send(ws, { type: 'activityLog:sync', entries: logReader.getEntries() });
+    }
 
     handleIncoming(ws, manager);
 

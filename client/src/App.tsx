@@ -24,6 +24,8 @@ import { ChatTab } from './interaction/ChatTab.js'
 import { ActionsTab } from './interaction/ActionsTab.js'
 import { RoomIndicator } from './ui/RoomIndicator.js'
 import { HelpOverlay } from './ui/HelpOverlay.js'
+import { MonitorOverlay } from './ui/MonitorOverlay.js'
+import { MonitorButton } from './ui/MonitorButton.js'
 import { TILE_SIZE } from './world/types.js'
 import { ZOOM_DEFAULT_DPR_FACTOR } from './world/constants.js'
 
@@ -31,12 +33,17 @@ const NO_KEYS = { up: false, down: false, left: false, right: false, interact: f
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const { connected, sessions, channels, chatMessages, sendPrompt, abortSession, getHistory } = useWebSocket()
-  const { world, update: updateWorld, switchRoom } = useWorld(sessions)
+  const { connected, gatewayConnected, sessions, channels, chatMessages, pendingSessionIds, gatewayLog, sendPrompt, abortSession, resetSession, getHistory } = useWebSocket()
+  const interaction = useInteraction(sessions)
+  const openPanelSessionId = interaction.isOpen ? interaction.sessionId : null
+  const { world, update: updateWorld, switchRoom } = useWorld(sessions, openPanelSessionId)
   const keys = useGameInput()
+  const keysRef = useRef(keys)
+  keysRef.current = keys
   const [currentRoomId, setCurrentRoomId] = useState('main-hall')
   const [spritesLoaded, setSpritesLoaded] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
+  const [showMonitor, setShowMonitor] = useState(false)
 
   const playerRef = useRef<Player>(
     createPlayer(5, 5, loadAppearance() ?? { palette: 0, hueShift: 0 })
@@ -49,20 +56,30 @@ export function App() {
     loadAllSprites().then(() => setSpritesLoaded(true))
   }, [])
 
-  const room = world.getCurrentRoom()
-  const currentCharacters = room ? room.officeState.getCharacters() : []
+  const inputDisabledRef = useRef(interaction.inputDisabled)
+  inputDisabledRef.current = interaction.inputDisabled
 
-  const interaction = useInteraction(sessions)
+  const interactionRef = useRef(interaction)
+  interactionRef.current = interaction
+  const sessionsRef = useRef(sessions)
+  sessionsRef.current = sessions
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      const isTyping = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
       if (e.key === '?' || (e.code === 'Slash' && e.shiftKey)) {
         setShowHelp(prev => !prev)
       }
+      if (e.code === 'KeyM' && !isTyping) {
+        setShowMonitor(prev => !prev)
+      }
       if (e.code === 'KeyE' || e.code === 'Space') {
-        if (!interaction.isOpen && sessions.length > 0) {
+        const inter = interactionRef.current
+        if (!inter.isOpen && sessionsRef.current.length > 0) {
           const p = playerRef.current
-          const chars = room?.officeState.getCharacters() ?? []
+          const currentRoom = world.getCurrentRoom()
+          const chars = currentRoom?.officeState.getCharacters() ?? []
           if (p && chars.length > 0) {
             let targetId = getInteractTarget(p, chars)
 
@@ -82,18 +99,18 @@ export function App() {
             if (targetId !== null) {
               const sessionId = world.getSessionByCharacterId(targetId)
               if (sessionId) {
-                interaction.openPanel(sessionId)
+                inter.openPanel(sessionId)
               }
             }
           }
-        } else if (interaction.isOpen) {
-          interaction.closePanel()
+        } else if (inter.isOpen) {
+          inter.closePanel()
         }
       }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [interaction, sessions, room, world])
+  }, [world])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -135,11 +152,11 @@ export function App() {
         if (transition.state === 'none') {
           const currentRoom = world.getCurrentRoom()
           if (currentRoom) {
-            const effectiveKeys = interaction.inputDisabled ? NO_KEYS : keys
+            const effectiveKeys = inputDisabledRef.current ? NO_KEYS : keysRef.current
             updatePlayer(player, effectiveKeys, dt, currentRoom.officeState.tileMap, currentRoom.officeState.blockedTiles)
 
             const roomDef = roomDefsRef.current.find(r => r.id === world.getCurrentRoomId())
-            if (roomDef && !interaction.inputDisabled) {
+            if (roomDef && !inputDisabledRef.current) {
               const doorway = checkPlayerDoorway(player, roomDef.doorways)
               if (doorway) {
                 startTransition(
@@ -187,6 +204,9 @@ export function App() {
         const panX = -camera.x - Math.floor((ctx.canvas.width - mapW) / 2)
         const panY = -camera.y - Math.floor((ctx.canvas.height - mapH) / 2)
 
+        const globalSession = sessionsRef.current.find(s => s.sessionAlias === 'global')
+        const globalCharId = globalSession ? world.getAgentCharacterId(globalSession.sessionId) : null
+
         renderFrame(
           ctx,
           ctx.canvas.width,
@@ -202,6 +222,7 @@ export function App() {
           currentRoom.layout.tileColors,
           currentRoom.layout.cols,
           currentRoom.layout.rows,
+          globalCharId,
         )
 
         const transition = transitionRef.current
@@ -219,7 +240,10 @@ export function App() {
       cleanup()
       window.removeEventListener('resize', resize)
     }
-  }, [spritesLoaded, world, updateWorld, keys, interaction.inputDisabled])
+  // keysRef and interaction.inputDisabled are read via refs inside the loop —
+  // they must NOT be in the dep array to avoid restarting the game loop on key events.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spritesLoaded, world, updateWorld])
 
   const handleSelectRoom = useCallback((roomId: string) => {
     const transition = transitionRef.current
@@ -229,10 +253,18 @@ export function App() {
     startTransition(transition, currentId, roomId, 5, 5)
   }, [world])
 
+  const CHANNEL_PROVIDERS = new Set(['slack', 'discord', 'telegram', 'whatsapp'])
+  const CHANNEL_KEY_RE = /^agent:[^:]+:(slack|discord|telegram|whatsapp):/i
   const roomInfos = roomDefsRef.current.map(r => ({
     id: r.id,
     name: r.name,
-    agentCount: sessions.filter(s => (s.room || 'main-hall') === r.id).length,
+    agentCount: sessions.filter(s => {
+      const isVisible = s.status === 'running'
+        || s.sessionAlias === 'global'
+        || (!!s.sessionAlias && CHANNEL_KEY_RE.test(s.sessionAlias))
+        || (!!s.origin?.provider && CHANNEL_PROVIDERS.has(s.origin.provider.toLowerCase()))
+      return isVisible && (s.room || 'main-hall') === r.id
+    }).length,
   }))
 
   const currentRoomDef = roomDefsRef.current.find(r => r.id === currentRoomId)
@@ -288,16 +320,31 @@ export function App() {
               onSendPrompt={sendPrompt}
               onGetHistory={getHistory}
               messages={currentMessages}
+              isPending={pendingSessionIds.has(interaction.currentSession.sessionId)}
             />
           )}
           {interaction.activeTab === 'actions' && (
             <ActionsTab
               session={interaction.currentSession}
               onAbort={abortSession}
+              onReset={resetSession}
               onClose={interaction.closePanel}
             />
           )}
         </InteractionPanel>
+      )}
+
+      <MonitorButton onClick={() => setShowMonitor(prev => !prev)} />
+
+      {showMonitor && (
+        <MonitorOverlay
+          sessions={sessions}
+          channels={channels}
+          connected={connected}
+          gatewayConnected={gatewayConnected}
+          gatewayLog={gatewayLog}
+          onClose={() => setShowMonitor(false)}
+        />
       )}
 
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}

@@ -9,6 +9,7 @@ import type { SpriteData } from '../types.js'
 import { setFloorSprites } from '../floorTiles.js'
 import { setWallSprites } from '../wallTiles.js'
 import { setCharacterTemplates } from './spriteData.js'
+import { FLOOR_TILE_REGIONS, FURNITURE_REGIONS } from './tilesetConfig.js'
 
 const PNG_ALPHA_THRESHOLD = 128
 const WALL_PIECE_WIDTH = 16
@@ -120,14 +121,80 @@ export async function loadCharacterSprites(
   return characters
 }
 
+function extractSpriteGrayscale(
+  imageData: ImageData,
+  ox: number,
+  oy: number,
+  w: number,
+  h: number,
+): SpriteData {
+  const sprite: SpriteData = []
+  const { data, width } = imageData
+  for (let y = 0; y < h; y++) {
+    const row: string[] = []
+    for (let x = 0; x < w; x++) {
+      const idx = ((oy + y) * width + (ox + x)) * 4
+      const r = data[idx]
+      const g = data[idx + 1]
+      const b = data[idx + 2]
+      const a = data[idx + 3]
+      if (a < PNG_ALPHA_THRESHOLD) {
+        row.push('')
+      } else {
+        const lum = Math.round(0.299 * r + 0.587 * g + 0.114 * b)
+        const hex = lum.toString(16).padStart(2, '0').toUpperCase()
+        row.push(`#${hex}${hex}${hex}`)
+      }
+    }
+    sprite.push(row)
+  }
+  return sprite
+}
+
+export async function loadFloorTileSprites(basePath = '/sprites'): Promise<SpriteData[]> {
+  try {
+    const img = await loadImage(`${basePath}/room_builder.png`)
+    const pixels = imageToPixels(img)
+    return FLOOR_TILE_REGIONS.map((r) =>
+      extractSpriteGrayscale(pixels, r.x, r.y, r.w, r.h)
+    )
+  } catch {
+    console.warn('Room Builder tileset not available, using fallback floors')
+    return []
+  }
+}
+
+export async function loadFurnitureTilesetSprites(
+  basePath = '/sprites',
+): Promise<Map<string, SpriteData>> {
+  const sprites = new Map<string, SpriteData>()
+  try {
+    const img = await loadImage(`${basePath}/interiors.png`)
+    const pixels = imageToPixels(img)
+    for (const [key, region] of Object.entries(FURNITURE_REGIONS)) {
+      sprites.set(key, extractSprite(pixels, region.x, region.y, region.w, region.h))
+    }
+  } catch {
+    console.warn('Interiors tileset not available, using fallback furniture')
+  }
+  return sprites
+}
+
+let loadedFurnitureSprites: Map<string, SpriteData> | null = null
+
+export function getFurnitureTilesetSprite(key: string): SpriteData | null {
+  return loadedFurnitureSprites?.get(key) ?? null
+}
+
 /**
  * Load all sprite assets and register them with the sprite system.
  * Call once on application startup.
  */
 export async function loadAllSprites(basePath = '/sprites'): Promise<void> {
-  const [wallSprites, charSprites] = await Promise.all([
+  const [wallSprites, charSprites, floorSprites] = await Promise.all([
     loadWallSprites(basePath),
     loadCharacterSprites(basePath),
+    loadFloorTileSprites(basePath),
   ])
 
   if (wallSprites.length > 0) {
@@ -138,6 +205,7 @@ export async function loadAllSprites(basePath = '/sprites'): Promise<void> {
     setCharacterTemplates(charSprites)
   }
 
-  // Floor sprites: no floors.png available, using default solid tiles
-  setFloorSprites([])
+  if (floorSprites.length > 0) {
+    setFloorSprites(floorSprites)
+  }
 }

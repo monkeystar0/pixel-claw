@@ -1,6 +1,25 @@
 import { EventEmitter } from 'node:events';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, sign as cryptoSign, createPrivateKey, createPublicKey } from 'node:crypto';
 import WebSocket from 'ws';
+import type { DeviceIdentity } from '../config.js';
+
+const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
+
+function base64UrlEncode(buf: Buffer): string {
+  return buf.toString('base64').replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/g, '');
+}
+
+function publicKeyRawBase64Url(publicKeyPem: string): string {
+  const key = createPublicKey(publicKeyPem);
+  const spki = key.export({ type: 'spki', format: 'der' }) as Buffer;
+  if (
+    spki.length === ED25519_SPKI_PREFIX.length + 32 &&
+    spki.subarray(0, ED25519_SPKI_PREFIX.length).equals(ED25519_SPKI_PREFIX)
+  ) {
+    return base64UrlEncode(spki.subarray(ED25519_SPKI_PREFIX.length));
+  }
+  return base64UrlEncode(spki);
+}
 
 const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
@@ -14,26 +33,38 @@ interface PendingRequest {
 
 export class GatewayClient extends EventEmitter {
   private gatewayUrl: string;
+  private authToken: string | null;
+  private device: DeviceIdentity | null;
   private ws: WebSocket | null = null;
   private connected = false;
+  private authenticated = false;
   private reconnecting = false;
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingRequests: Map<string, PendingRequest> = new Map();
   private shouldReconnect = false;
 
-  constructor(gatewayUrl: string) {
+  constructor(gatewayUrl: string, authToken: string | null = null, device: DeviceIdentity | null = null) {
     super();
     this.gatewayUrl = gatewayUrl;
+    this.authToken = authToken;
+    this.device = device;
   }
 
   async connect(): Promise<void> {
     this.shouldReconnect = true;
-    return this.doConnect();
+    try {
+      await this.doConnect();
+    } catch (err) {
+      console.warn(`[gateway] initial connection failed: ${(err as Error).message}`);
+      this.scheduleReconnect();
+      throw err;
+    }
   }
 
   disconnect(): void {
     this.shouldReconnect = false;
+    this.authenticated = false;
     this.clearReconnectTimer();
 
     for (const [id, pending] of this.pendingRequests) {
@@ -79,15 +110,22 @@ export class GatewayClient extends EventEmitter {
         return;
       }
 
+      let settled = false;
+
       const onOpen = () => {
+        settled = true;
+        removeSetupListeners();
         this.connected = true;
         this.reconnectAttempt = 0;
-        cleanup();
+        this.setupListeners(this.ws!);
+        console.log(`[gateway] connected to ${this.gatewayUrl}`);
         resolve();
       };
 
       const onError = (err: Error) => {
-        cleanup();
+        if (settled) return;
+        settled = true;
+        removeSetupListeners();
         this.connected = false;
         if (this.ws) {
           this.ws.removeAllListeners();
@@ -97,7 +135,9 @@ export class GatewayClient extends EventEmitter {
       };
 
       const onClose = () => {
-        cleanup();
+        if (settled) return;
+        settled = true;
+        removeSetupListeners();
         this.connected = false;
         if (this.ws) {
           this.ws.removeAllListeners();
@@ -106,13 +146,10 @@ export class GatewayClient extends EventEmitter {
         reject(new Error('WebSocket closed before open'));
       };
 
-      const cleanup = () => {
+      const removeSetupListeners = () => {
         this.ws?.removeListener('open', onOpen);
         this.ws?.removeListener('error', onError);
         this.ws?.removeListener('close', onClose);
-        if (this.ws) {
-          this.setupListeners(this.ws);
-        }
       };
 
       this.ws.on('open', onOpen);
@@ -126,8 +163,10 @@ export class GatewayClient extends EventEmitter {
       this.handleMessage(raw.toString());
     });
 
-    ws.on('close', () => {
+    ws.on('close', (code: number, reason: Buffer) => {
+      console.log(`[gateway] disconnected (code=${code}${reason.length ? ' ' + reason.toString() : ''})`);
       this.connected = false;
+      this.authenticated = false;
       this.rejectPendingRequests('Connection closed');
       this.emit('disconnected');
       this.scheduleReconnect();
@@ -146,6 +185,58 @@ export class GatewayClient extends EventEmitter {
       return;
     }
 
+
+    if (data.type === 'event' && data.event === 'connect.challenge') {
+      this.handleChallenge(data.payload as Record<string, unknown>);
+      return;
+    }
+
+    if (data.type === 'event' && data.event === 'connect.authenticated') {
+      this.authenticated = true;
+      console.log('[gateway] authenticated');
+      this.emit('authenticated');
+      return;
+    }
+
+    if (data.type === 'res') {
+      const resPayload = data.payload as Record<string, unknown> | undefined;
+      if (data.ok === true && resPayload?.type === 'hello-ok') {
+        this.authenticated = true;
+        console.log(`[gateway] authenticated (protocol=${resPayload.protocol})`);
+        this.emit('authenticated');
+        return;
+      }
+      if (data.ok === false && !this.pendingRequests.has(data.id as string)) {
+        const err = data.error as Record<string, unknown> | undefined;
+        console.error(`[gateway] connect rejected: ${JSON.stringify(err ?? data)}`);
+        return;
+      }
+    }
+
+    if (data.type === 'res' && data.id && typeof data.id === 'string' && this.pendingRequests.has(data.id)) {
+      const pending = this.pendingRequests.get(data.id)!;
+      this.pendingRequests.delete(data.id);
+      clearTimeout(pending.timer);
+
+      if (data.ok === false) {
+        const err = data.error as Record<string, unknown> | undefined;
+        pending.reject(new Error(err?.message as string ?? 'Request failed'));
+      } else {
+        pending.resolve(data.payload);
+      }
+      return;
+    }
+
+    if (data.type === 'event') {
+      const event = data.event as string;
+      if (event === 'chat') {
+        this.emit('chat:event', data.payload);
+      } else {
+        this.emit('gateway:event', data);
+      }
+      return;
+    }
+
     if (data.id && typeof data.id === 'string' && this.pendingRequests.has(data.id)) {
       const pending = this.pendingRequests.get(data.id)!;
       this.pendingRequests.delete(data.id);
@@ -158,25 +249,98 @@ export class GatewayClient extends EventEmitter {
             : 'Request failed'
         ));
       } else {
-        pending.resolve(data.result);
+        pending.resolve(data.result ?? data.payload);
       }
       return;
     }
+  }
 
-    if (data.method === 'chat.event' && data.params) {
-      this.emit('chat:event', data.params);
+  private handleChallenge(payload: Record<string, unknown>): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+    const nonce = payload.nonce as string;
+    if (!this.authToken) {
+      console.warn('[gateway] challenge received but no auth token configured');
       return;
     }
 
-    if (data.method) {
-      this.emit('gateway:message', data);
+    const role = 'operator';
+
+    const clientId = this.device?.pairedClientId ?? 'gateway-client';
+    const clientMode = this.device?.pairedClientMode ?? 'backend';
+    const scopes = this.device?.pairedScopes ?? ['operator.read'];
+    const platform = 'darwin';
+
+    const effectiveToken = this.device?.authToken ?? this.authToken;
+
+    const params: Record<string, unknown> = {
+      minProtocol: 3,
+      maxProtocol: 3,
+      client: {
+        id: clientId,
+        version: '1.0.0',
+        platform,
+        mode: clientMode,
+      },
+      role,
+      scopes,
+      caps: [],
+      commands: [],
+      permissions: {},
+      auth: { token: effectiveToken },
+      locale: 'en-US',
+      userAgent: 'pixel-claw/1.0.0',
+    };
+
+    if (this.device) {
+      const signedAtMs = Date.now();
+      const token = effectiveToken ?? '';
+
+      const signPayload = [
+        'v2',
+        this.device.deviceId,
+        clientId,
+        clientMode,
+        role,
+        scopes.join(','),
+        String(signedAtMs),
+        token,
+        nonce,
+      ].join('|');
+
+      const privKey = createPrivateKey(this.device.privateKeyPem);
+      const sigBuf = cryptoSign(null, Buffer.from(signPayload, 'utf8'), privKey);
+      const signature = base64UrlEncode(sigBuf);
+      const pubKeyB64Url = publicKeyRawBase64Url(this.device.publicKeyPem);
+
+      params.device = {
+        id: this.device.deviceId,
+        publicKey: pubKeyB64Url,
+        signature,
+        signedAt: signedAtMs,
+        nonce,
+      };
     }
+
+    const connectReq = {
+      type: 'req',
+      id: randomUUID(),
+      method: 'connect',
+      params,
+    };
+
+    this.ws.send(JSON.stringify(connectReq));
+    console.log('[gateway] connect request sent');
   }
 
   private request<T>(method: string, params: unknown): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
         reject(new Error('Not connected to gateway'));
+        return;
+      }
+      if (!this.authenticated) {
+        reject(new Error('Not authenticated with gateway'));
         return;
       }
 
@@ -193,7 +357,7 @@ export class GatewayClient extends EventEmitter {
       });
 
       const message = JSON.stringify({
-        jsonrpc: '2.0',
+        type: 'req',
         id,
         method,
         params,
@@ -221,6 +385,7 @@ export class GatewayClient extends EventEmitter {
     );
     this.reconnectAttempt++;
 
+    console.log(`[gateway] reconnecting in ${delay}ms (attempt ${this.reconnectAttempt})`);
     this.reconnectTimer = setTimeout(async () => {
       this.reconnecting = false;
       try {

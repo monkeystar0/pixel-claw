@@ -1,5 +1,5 @@
 import type { OfficeLayout } from '../types.js'
-import { createDefaultLayout } from '../layout/layoutSerializer.js'
+import { createMainHallLayout, createSlackRoomLayout, createDiscordRoomLayout } from '../layout/layoutSerializer.js'
 import type { Player } from './player.js'
 
 export interface RoomDoorway {
@@ -106,34 +106,30 @@ export function checkPlayerDoorway(
 }
 
 export function createDefaultRooms(): RoomDefinition[] {
-  const mainLayout = createDefaultLayout()
-  const slackLayout = createDefaultLayout()
-  const discordLayout = createDefaultLayout()
-
   return [
     {
       id: 'main-hall',
       name: 'Main Hall',
-      layout: mainLayout,
+      layout: createMainHallLayout(),
       doorways: [
-        { col: 19, row: 5, targetRoomId: 'slack-room', targetCol: 1, targetRow: 5 },
-        { col: 19, row: 6, targetRoomId: 'discord-room', targetCol: 1, targetRow: 6 },
+        { col: 19, row: 5, targetRoomId: 'discord-room', targetCol: 1, targetRow: 5 },
+        { col: 19, row: 6, targetRoomId: 'slack-room', targetCol: 1, targetRow: 6 },
       ],
     },
     {
       id: 'slack-room',
       name: 'Slack Room',
-      layout: slackLayout,
+      layout: createSlackRoomLayout(),
       doorways: [
-        { col: 0, row: 5, targetRoomId: 'main-hall', targetCol: 18, targetRow: 5 },
+        { col: 0, row: 6, targetRoomId: 'main-hall', targetCol: 18, targetRow: 6 },
       ],
     },
     {
       id: 'discord-room',
       name: 'Discord Room',
-      layout: discordLayout,
+      layout: createDiscordRoomLayout(),
       doorways: [
-        { col: 0, row: 6, targetRoomId: 'main-hall', targetCol: 18, targetRow: 6 },
+        { col: 0, row: 5, targetRoomId: 'main-hall', targetCol: 18, targetRow: 5 },
       ],
     },
   ]

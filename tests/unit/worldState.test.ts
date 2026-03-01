@@ -158,6 +158,48 @@ describe('WorldState', () => {
     })
   })
 
+  describe('agent bubble management', () => {
+    beforeEach(() => {
+      world.addRoom('main-hall', createDefaultLayout())
+      world.addAgent('session-1', 'main-hall')
+    })
+
+    it('should show thinking bubble on agent', () => {
+      world.showAgentThinkingBubble('session-1')
+      const room = world.getRoom('main-hall')!
+      const charId = world.getAgentCharacterId('session-1')!
+      const ch = room.characters.get(charId)!
+      expect(ch.bubbleType).toBe('thinking')
+    })
+
+    it('should dismiss agent bubble', () => {
+      world.showAgentThinkingBubble('session-1')
+      world.dismissAgentBubble('session-1')
+      const room = world.getRoom('main-hall')!
+      const charId = world.getAgentCharacterId('session-1')!
+      const ch = room.characters.get(charId)!
+      expect(ch.bubbleType).toBeNull()
+    })
+
+    it('should show done bubble after thinking', () => {
+      world.showAgentThinkingBubble('session-1')
+      world.showAgentDoneBubble('session-1')
+      const room = world.getRoom('main-hall')!
+      const charId = world.getAgentCharacterId('session-1')!
+      const ch = room.characters.get(charId)!
+      expect(ch.bubbleType).toBe('waiting')
+      expect(ch.bubbleTimer).toBeGreaterThan(0)
+    })
+
+    it('should not show thinking bubble for unknown session', () => {
+      world.showAgentThinkingBubble('nonexistent')
+      const room = world.getRoom('main-hall')!
+      const charId = world.getAgentCharacterId('session-1')!
+      const ch = room.characters.get(charId)!
+      expect(ch.bubbleType).toBeNull()
+    })
+  })
+
   describe('getAllSessions', () => {
     it('should return all session-to-room mappings', () => {
       world.addRoom('main-hall', createDefaultLayout())

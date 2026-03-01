@@ -3,7 +3,7 @@ import { watch, type FSWatcher } from 'chokidar';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import type { Config } from '../config.js';
-import type { SessionData, SessionOrigin } from './types.js';
+import type { SessionData, SessionOrigin, TokenUsage } from './types.js';
 import { parseSessionFile } from './sessionParser.js';
 
 interface SessionsJsonEntry {
@@ -13,6 +13,15 @@ interface SessionsJsonEntry {
   displayName?: string;
   origin?: SessionOrigin;
   abortedLastRun?: boolean;
+  sessionFile?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  contextTokens?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  model?: string;
+  modelProvider?: string;
 }
 
 interface SessionsMetadata {
@@ -20,6 +29,11 @@ interface SessionsMetadata {
   origins: Map<string, SessionOrigin>;
   activeSessionIds: Set<string>;
   allSessionIds: Set<string>;
+  aliases: Map<string, string>;
+  fileIdToCanonicalId: Map<string, string>;
+  tokenUsage: Map<string, TokenUsage>;
+  models: Map<string, string>;
+  updatedAts: Map<string, number>;
 }
 
 const ACTIVE_THRESHOLD_MS = 60_000;
@@ -83,10 +97,10 @@ export class SessionWatcher extends EventEmitter {
 
     for (const file of files) {
       const filePath = join(this.config.sessionsDir, file);
-      const sessionId = basename(file, '.jsonl');
-      const session = this.parseAndEnrich(filePath, sessionId, metadata);
+      const fileId = basename(file, '.jsonl');
+      const session = this.parseAndEnrich(filePath, fileId, metadata);
       if (session) {
-        this.sessions.set(sessionId, session);
+        this.sessions.set(session.sessionId, session);
       }
     }
   }
@@ -96,13 +110,13 @@ export class SessionWatcher extends EventEmitter {
       return;
     }
 
-    const sessionId = basename(filePath, '.jsonl');
+    const fileId = basename(filePath, '.jsonl');
     const metadata = this.loadSessionsMetadata();
-    const session = this.parseAndEnrich(filePath, sessionId, metadata);
+    const session = this.parseAndEnrich(filePath, fileId, metadata);
     if (!session) return;
 
-    const isNew = !this.sessions.has(sessionId);
-    this.sessions.set(sessionId, session);
+    const isNew = !this.sessions.has(session.sessionId);
+    this.sessions.set(session.sessionId, session);
 
     if (isNew || eventType === 'added') {
       this.emit('session:added', session);
@@ -114,10 +128,13 @@ export class SessionWatcher extends EventEmitter {
   private handleFileRemoved(filePath: string): void {
     if (!filePath.endsWith('.jsonl')) return;
 
-    const sessionId = basename(filePath, '.jsonl');
-    if (this.sessions.has(sessionId)) {
-      this.sessions.delete(sessionId);
-      this.emit('session:removed', sessionId);
+    const fileId = basename(filePath, '.jsonl');
+    const metadata = this.loadSessionsMetadata();
+    const canonicalId = metadata.fileIdToCanonicalId.get(fileId) ?? fileId;
+
+    if (this.sessions.has(canonicalId)) {
+      this.sessions.delete(canonicalId);
+      this.emit('session:removed', canonicalId);
     }
   }
 
@@ -129,17 +146,25 @@ export class SessionWatcher extends EventEmitter {
     const session = parseSessionFile(filePath);
     if (!session) return null;
 
-    const label = metadata.labels.get(sessionId);
+    const canonicalId = metadata.fileIdToCanonicalId.get(sessionId) ?? sessionId;
+    session.sessionId = canonicalId;
+
+    const label = metadata.labels.get(canonicalId);
     if (label) {
       session.label = label;
     }
 
-    const origin = metadata.origins.get(sessionId);
+    const origin = metadata.origins.get(canonicalId);
     if (origin) {
       session.origin = origin;
     }
 
-    if (metadata.activeSessionIds.has(sessionId)) {
+    session.sessionAlias = metadata.aliases.get(canonicalId) ?? null;
+    session.tokenUsage = metadata.tokenUsage.get(canonicalId) ?? null;
+    session.model = metadata.models.get(canonicalId) ?? null;
+    session.updatedAt = metadata.updatedAts.get(canonicalId) ?? session.startTime;
+
+    if (metadata.activeSessionIds.has(canonicalId)) {
       session.status = 'running';
     } else if (session.status === 'running') {
       session.status = 'complete';
@@ -176,6 +201,30 @@ export class SessionWatcher extends EventEmitter {
         changed = true;
       }
 
+      const alias = metadata.aliases.get(sessionId) ?? null;
+      if (alias !== session.sessionAlias) {
+        session.sessionAlias = alias;
+        changed = true;
+      }
+
+      const tokens = metadata.tokenUsage.get(sessionId) ?? null;
+      if (tokens && tokens.totalTokens !== session.tokenUsage?.totalTokens) {
+        session.tokenUsage = tokens;
+        changed = true;
+      }
+
+      const model = metadata.models.get(sessionId) ?? null;
+      if (model && model !== session.model) {
+        session.model = model;
+        changed = true;
+      }
+
+      const updatedAt = metadata.updatedAts.get(sessionId);
+      if (updatedAt && updatedAt !== session.updatedAt) {
+        session.updatedAt = updatedAt;
+        changed = true;
+      }
+
       if (changed) {
         this.emit('session:updated', session);
         changed = false;
@@ -188,20 +237,33 @@ export class SessionWatcher extends EventEmitter {
     const origins = new Map<string, SessionOrigin>();
     const activeSessionIds = new Set<string>();
     const allSessionIds = new Set<string>();
+    const aliases = new Map<string, string>();
+    const fileIdToCanonicalId = new Map<string, string>();
+    const tokenUsage = new Map<string, TokenUsage>();
+    const models = new Map<string, string>();
+    const updatedAts = new Map<string, number>();
 
     try {
       if (!existsSync(this.config.sessionsJsonPath)) {
-        return { labels, origins, activeSessionIds, allSessionIds };
+        return { labels, origins, activeSessionIds, allSessionIds, aliases, fileIdToCanonicalId, tokenUsage, models, updatedAts };
       }
 
       const raw = readFileSync(this.config.sessionsJsonPath, 'utf-8');
       const data = JSON.parse(raw) as Record<string, SessionsJsonEntry>;
       const now = Date.now();
 
-      for (const [, entry] of Object.entries(data)) {
+      for (const [key, entry] of Object.entries(data)) {
         if (!entry.sessionId) continue;
         const sid = entry.sessionId;
         allSessionIds.add(sid);
+        aliases.set(sid, key);
+
+        if (entry.sessionFile) {
+          const fileId = basename(entry.sessionFile, '.jsonl');
+          if (fileId !== sid) {
+            fileIdToCanonicalId.set(fileId, sid);
+          }
+        }
 
         if (entry.label || entry.displayName) {
           labels.set(sid, (entry.label ?? entry.displayName)!);
@@ -214,11 +276,33 @@ export class SessionWatcher extends EventEmitter {
         if (entry.updatedAt && (now - entry.updatedAt) < ACTIVE_THRESHOLD_MS) {
           activeSessionIds.add(sid);
         }
+
+        if (entry.updatedAt) {
+          updatedAts.set(sid, entry.updatedAt);
+        }
+
+        if (entry.totalTokens !== undefined) {
+          tokenUsage.set(sid, {
+            inputTokens: entry.inputTokens ?? 0,
+            outputTokens: entry.outputTokens ?? 0,
+            totalTokens: entry.totalTokens ?? 0,
+            contextTokens: entry.contextTokens ?? 0,
+            cacheRead: entry.cacheRead ?? 0,
+            cacheWrite: entry.cacheWrite ?? 0,
+          });
+        }
+
+        if (entry.model) {
+          const label = entry.modelProvider
+            ? `${entry.modelProvider}/${entry.model}`
+            : entry.model;
+          models.set(sid, label);
+        }
       }
     } catch {
       // Gracefully handle read/parse errors
     }
 
-    return { labels, origins, activeSessionIds, allSessionIds };
+    return { labels, origins, activeSessionIds, allSessionIds, aliases, fileIdToCanonicalId, tokenUsage, models, updatedAts };
   }
 }

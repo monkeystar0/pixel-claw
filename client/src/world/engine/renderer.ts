@@ -4,6 +4,7 @@ import { getCachedSprite, getOutlineSprite } from '../sprites/spriteCache.js'
 import { getCharacterSprites, BUBBLE_PERMISSION_SPRITE, BUBBLE_WAITING_SPRITE } from '../sprites/spriteData.js'
 import { getCharacterSprite } from './characters.js'
 import { renderMatrixEffect } from './matrixEffect.js'
+import { PLAYER_CHARACTER_ID } from './player.js'
 import { getColorizedFloorSprite, hasFloorSprites, WALL_COLOR } from '../floorTiles.js'
 import { hasWallSprites, getWallInstances, wallColorToHex } from '../wallTiles.js'
 import {
@@ -103,6 +104,7 @@ export function renderScene(
   zoom: number,
   selectedAgentId: number | null,
   hoveredAgentId: number | null,
+  globalAgentId?: number | null,
 ): void {
   const drawables: ZDrawable[] = []
 
@@ -176,6 +178,7 @@ export function renderScene(
         c.drawImage(cached, drawX, drawY)
       },
     })
+
   }
 
   // Sort by Y (lower = in front = drawn later)
@@ -183,6 +186,95 @@ export function renderScene(
 
   for (const d of drawables) {
     d.draw(ctx)
+  }
+
+  renderPlayerIndicator(ctx, characters, offsetX, offsetY, zoom)
+  if (globalAgentId != null) {
+    renderGlobalAgentIndicator(ctx, characters, offsetX, offsetY, zoom, globalAgentId)
+  }
+}
+
+const INDICATOR_FILL = '#ffe03a'
+const INDICATOR_STROKE = '#aa7700'
+const INDICATOR_BOUNCE_PERIOD = 350
+const INDICATOR_BOUNCE_AMP = 2.5
+
+function renderPlayerIndicator(
+  ctx: CanvasRenderingContext2D,
+  characters: Character[],
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): void {
+  for (const ch of characters) {
+    if (ch.id !== PLAYER_CHARACTER_ID) continue
+
+    const spriteH = 20 * zoom
+    const cx = Math.round(offsetX + ch.x * zoom)
+    const headY = Math.round(offsetY + ch.y * zoom - spriteH)
+
+    const triW = 10 * zoom
+    const triH = 6 * zoom
+    const gap = 3 * zoom
+    const bounce = Math.sin(performance.now() / INDICATOR_BOUNCE_PERIOD) * INDICATOR_BOUNCE_AMP * zoom
+    const tipY = headY - gap + bounce
+
+    ctx.save()
+    ctx.beginPath()
+    ctx.moveTo(cx, tipY)
+    ctx.lineTo(cx - triW / 2, tipY - triH)
+    ctx.lineTo(cx + triW / 2, tipY - triH)
+    ctx.closePath()
+    ctx.fillStyle = INDICATOR_FILL
+    ctx.fill()
+    ctx.strokeStyle = INDICATOR_STROKE
+    ctx.lineWidth = Math.max(1, zoom * 0.8)
+    ctx.stroke()
+    ctx.restore()
+    break
+  }
+}
+
+const GLOBAL_STAR_FILL = '#44ddff'
+const GLOBAL_STAR_STROKE = '#1188aa'
+const GLOBAL_STAR_BOUNCE_PERIOD = 500
+
+function renderGlobalAgentIndicator(
+  ctx: CanvasRenderingContext2D,
+  characters: Character[],
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+  globalAgentId: number,
+): void {
+  for (const ch of characters) {
+    if (ch.id !== globalAgentId) continue
+
+    const spriteH = 20 * zoom
+    const cx = Math.round(offsetX + ch.x * zoom)
+    const headY = Math.round(offsetY + ch.y * zoom - spriteH)
+
+    const r = 4 * zoom
+    const gap = 4 * zoom
+    const bounce = Math.sin(performance.now() / GLOBAL_STAR_BOUNCE_PERIOD) * 1.5 * zoom
+    const centerY = headY - gap - r + bounce
+
+    ctx.save()
+    ctx.beginPath()
+    for (let i = 0; i < 5; i++) {
+      const outerAngle = -Math.PI / 2 + (i * 2 * Math.PI) / 5
+      const innerAngle = outerAngle + Math.PI / 5
+      ctx.lineTo(cx + Math.cos(outerAngle) * r, centerY + Math.sin(outerAngle) * r)
+      ctx.lineTo(cx + Math.cos(innerAngle) * r * 0.45, centerY + Math.sin(innerAngle) * r * 0.45)
+    }
+    ctx.closePath()
+    ctx.fillStyle = GLOBAL_STAR_FILL
+    ctx.fill()
+    ctx.strokeStyle = GLOBAL_STAR_STROKE
+    ctx.lineWidth = Math.max(1, zoom * 0.6)
+    ctx.stroke()
+    ctx.restore()
+    break
   }
 }
 
@@ -457,21 +549,23 @@ export function renderBubbles(
   for (const ch of characters) {
     if (!ch.bubbleType) continue
 
+    const sittingOff = ch.state === CharacterState.TYPE ? BUBBLE_SITTING_OFFSET_PX : 0
+
+    if (ch.bubbleType === 'thinking') {
+      renderThinkingBubble(ctx, ch, offsetX, offsetY, zoom, sittingOff)
+      continue
+    }
+
     const sprite = ch.bubbleType === 'permission'
       ? BUBBLE_PERMISSION_SPRITE
       : BUBBLE_WAITING_SPRITE
 
-    // Compute opacity: permission = full, waiting = fade in last 0.5s
     let alpha = 1.0
     if (ch.bubbleType === 'waiting' && ch.bubbleTimer < BUBBLE_FADE_DURATION_SEC) {
       alpha = ch.bubbleTimer / BUBBLE_FADE_DURATION_SEC
     }
 
     const cached = getCachedSprite(sprite, zoom)
-    // Position: centered above the character's head
-    // Character is anchored bottom-center at (ch.x, ch.y), sprite is 16x24
-    // Place bubble above head with a small gap; follow sitting offset
-    const sittingOff = ch.state === CharacterState.TYPE ? BUBBLE_SITTING_OFFSET_PX : 0
     const bubbleX = Math.round(offsetX + ch.x * zoom - cached.width / 2)
     const bubbleY = Math.round(offsetY + (ch.y + sittingOff - BUBBLE_VERTICAL_OFFSET_PX) * zoom - cached.height - 1 * zoom)
 
@@ -480,6 +574,80 @@ export function renderBubbles(
     ctx.drawImage(cached, bubbleX, bubbleY)
     ctx.restore()
   }
+}
+
+const THINKING_BUBBLE_W = 11
+const THINKING_BUBBLE_H = 10
+const THINKING_DOT_RADIUS_FACTOR = 0.8
+const THINKING_DOT_SPACING = 3
+const THINKING_DOT_BOUNCE_AMP = 1.5
+const THINKING_DOT_PERIOD_MS = 600
+const THINKING_DOT_PHASE_OFFSET = 200
+const THINKING_BORDER_COLOR = '#555566'
+const THINKING_FILL_COLOR = '#EEEEFF'
+const THINKING_DOT_COLOR = '#6B8AFF'
+const THINKING_DOT_ACTIVE_COLOR = '#4466EE'
+
+function renderThinkingBubble(
+  ctx: CanvasRenderingContext2D,
+  ch: Character,
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+  sittingOff: number,
+): void {
+  const w = THINKING_BUBBLE_W * zoom
+  const h = THINKING_BUBBLE_H * zoom
+  const tailH = 3 * zoom
+  const cx = Math.round(offsetX + ch.x * zoom)
+  const topY = Math.round(
+    offsetY + (ch.y + sittingOff - BUBBLE_VERTICAL_OFFSET_PX) * zoom - h - tailH - 1 * zoom,
+  )
+
+  ctx.save()
+
+  const bx = cx - w / 2
+  const r = 2 * zoom
+  ctx.beginPath()
+  ctx.moveTo(bx + r, topY)
+  ctx.lineTo(bx + w - r, topY)
+  ctx.quadraticCurveTo(bx + w, topY, bx + w, topY + r)
+  ctx.lineTo(bx + w, topY + h - r)
+  ctx.quadraticCurveTo(bx + w, topY + h, bx + w - r, topY + h)
+  ctx.lineTo(cx + 2 * zoom, topY + h)
+  ctx.lineTo(cx, topY + h + tailH)
+  ctx.lineTo(cx - 2 * zoom, topY + h)
+  ctx.lineTo(bx + r, topY + h)
+  ctx.quadraticCurveTo(bx, topY + h, bx, topY + h - r)
+  ctx.lineTo(bx, topY + r)
+  ctx.quadraticCurveTo(bx, topY, bx + r, topY)
+  ctx.closePath()
+
+  ctx.fillStyle = THINKING_FILL_COLOR
+  ctx.fill()
+  ctx.strokeStyle = THINKING_BORDER_COLOR
+  ctx.lineWidth = Math.max(1, zoom * 0.5)
+  ctx.stroke()
+
+  const now = performance.now()
+  const dotR = THINKING_DOT_RADIUS_FACTOR * zoom
+  const dotY = topY + h / 2
+
+  for (let i = 0; i < 3; i++) {
+    const phase = (now + i * THINKING_DOT_PHASE_OFFSET) % THINKING_DOT_PERIOD_MS
+    const t = phase / THINKING_DOT_PERIOD_MS
+    const bounce = -Math.abs(Math.sin(t * Math.PI)) * THINKING_DOT_BOUNCE_AMP * zoom
+    const dotX = cx + (i - 1) * THINKING_DOT_SPACING * zoom
+
+    ctx.beginPath()
+    ctx.arc(dotX, dotY + bounce, dotR, 0, Math.PI * 2)
+    ctx.fillStyle = bounce < -THINKING_DOT_BOUNCE_AMP * zoom * 0.5
+      ? THINKING_DOT_ACTIVE_COLOR
+      : THINKING_DOT_COLOR
+    ctx.fill()
+  }
+
+  ctx.restore()
 }
 
 export interface ButtonBounds {
@@ -541,6 +709,7 @@ export function renderFrame(
   tileColors?: Array<FloorColor | null>,
   layoutCols?: number,
   layoutRows?: number,
+  globalAgentId?: number | null,
 ): { offsetX: number; offsetY: number } {
   // Clear
   ctx.clearRect(0, 0, canvasWidth, canvasHeight)
@@ -574,7 +743,7 @@ export function renderFrame(
   // Draw walls + furniture + characters (z-sorted)
   const selectedId = selection?.selectedAgentId ?? null
   const hoveredId = selection?.hoveredAgentId ?? null
-  renderScene(ctx, allFurniture, characters, offsetX, offsetY, zoom, selectedId, hoveredId)
+  renderScene(ctx, allFurniture, characters, offsetX, offsetY, zoom, selectedId, hoveredId, globalAgentId)
 
   // Speech bubbles (always on top of characters)
   renderBubbles(ctx, characters, offsetX, offsetY, zoom)

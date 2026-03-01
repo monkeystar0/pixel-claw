@@ -204,67 +204,245 @@ export function getSeatTiles(seats: Map<string, Seat>): Set<string> {
   return tiles
 }
 
-/** Default floor colors for the two rooms */
-const DEFAULT_LEFT_ROOM_COLOR: FloorColor = { h: 35, s: 30, b: 15, c: 0 }  // warm beige
-const DEFAULT_RIGHT_ROOM_COLOR: FloorColor = { h: 25, s: 45, b: 5, c: 10 }  // warm brown
-const DEFAULT_CARPET_COLOR: FloorColor = { h: 280, s: 40, b: -5, c: 0 }     // purple
-const DEFAULT_DOORWAY_COLOR: FloorColor = { h: 35, s: 25, b: 10, c: 0 }     // tan
+/** Shared floor colors */
+const FLOOR_BEIGE: FloorColor = { h: 35, s: 30, b: 15, c: 0 }
+const FLOOR_WARM_BROWN: FloorColor = { h: 25, s: 45, b: 5, c: 10 }
+const FLOOR_CARPET_PURPLE: FloorColor = { h: 280, s: 40, b: -5, c: 0 }
+const FLOOR_DOORWAY: FloorColor = { h: 35, s: 25, b: 10, c: 0 }
+const FLOOR_COOL_BLUE: FloorColor = { h: 210, s: 30, b: 12, c: 5 }
+const FLOOR_SLATE: FloorColor = { h: 220, s: 20, b: 5, c: 8 }
+const FLOOR_CARPET_BLUE: FloorColor = { h: 230, s: 45, b: -8, c: 0 }
+const FLOOR_TEAL: FloorColor = { h: 170, s: 35, b: 10, c: 5 }
+const FLOOR_SAGE: FloorColor = { h: 140, s: 25, b: 8, c: 0 }
+const FLOOR_CARPET_GREEN: FloorColor = { h: 160, s: 40, b: -5, c: 0 }
+const FLOOR_CARPET_TEAL: FloorColor = { h: 180, s: 35, b: -3, c: 0 }
 
-/** Create the default office layout matching the current hardcoded office */
-export function createDefaultLayout(): OfficeLayout {
+type TileVal = typeof TileType[keyof typeof TileType]
+
+function buildTileGrid(
+  cols: number,
+  rows: number,
+  fillFn: (r: number, c: number) => { tile: TileVal; color: FloorColor | null },
+): { tiles: TileVal[]; tileColors: Array<FloorColor | null> } {
+  const tiles: TileVal[] = []
+  const tileColors: Array<FloorColor | null> = []
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const { tile, color } = fillFn(r, c)
+      tiles.push(tile)
+      tileColors.push(color)
+    }
+  }
+  return { tiles, tileColors }
+}
+
+// ── Main Hall ─────────────────────────────────────────────────────
+// Warm, welcoming lobby with two work areas, lounge carpet, lots of decor.
+export function createMainHallLayout(): OfficeLayout {
   const W = TileType.WALL
   const F1 = TileType.FLOOR_1
   const F2 = TileType.FLOOR_2
   const F3 = TileType.FLOOR_3
   const F4 = TileType.FLOOR_4
 
-  const tiles: TileTypeVal[] = []
-  const tileColors: Array<FloorColor | null> = []
-
-  for (let r = 0; r < DEFAULT_ROWS; r++) {
-    for (let c = 0; c < DEFAULT_COLS; c++) {
-      if (r === 0 || r === DEFAULT_ROWS - 1) { tiles.push(W); tileColors.push(null); continue }
-      if (c === 0 || c === DEFAULT_COLS - 1) { tiles.push(W); tileColors.push(null); continue }
-      if (c === 10) {
-        if (r >= 4 && r <= 6) {
-          tiles.push(F4); tileColors.push(DEFAULT_DOORWAY_COLOR)
-        } else {
-          tiles.push(W); tileColors.push(null)
-        }
-        continue
-      }
-      if (c >= 15 && c <= 18 && r >= 7 && r <= 9) {
-        tiles.push(F3); tileColors.push(DEFAULT_CARPET_COLOR); continue
-      }
-      if (c < 10) {
-        tiles.push(F1); tileColors.push(DEFAULT_LEFT_ROOM_COLOR)
-      } else {
-        tiles.push(F2); tileColors.push(DEFAULT_RIGHT_ROOM_COLOR)
-      }
+  const { tiles, tileColors } = buildTileGrid(DEFAULT_COLS, DEFAULT_ROWS, (r, c) => {
+    if (r === 0 || r === DEFAULT_ROWS - 1) return { tile: W, color: null }
+    if (c === 0 || c === DEFAULT_COLS - 1) {
+      if (c === DEFAULT_COLS - 1 && (r === 5 || r === 6)) return { tile: F4, color: FLOOR_DOORWAY }
+      return { tile: W, color: null }
     }
-  }
+    if (c === 10) {
+      if (r >= 4 && r <= 6) return { tile: F4, color: FLOOR_DOORWAY }
+      return { tile: W, color: null }
+    }
+    if (c >= 2 && c <= 5 && r >= 7 && r <= 9) return { tile: F3, color: FLOOR_CARPET_PURPLE }
+    if (c < 10) return { tile: F1, color: FLOOR_BEIGE }
+    return { tile: F2, color: FLOOR_WARM_BROWN }
+  })
 
   const furniture: PlacedFurniture[] = [
-    { uid: 'desk-left', type: FurnitureType.DESK, col: 4, row: 3 },
-    { uid: 'desk-right', type: FurnitureType.DESK, col: 13, row: 3 },
-    { uid: 'bookshelf-1', type: FurnitureType.BOOKSHELF, col: 1, row: 5 },
-    { uid: 'plant-left', type: FurnitureType.PLANT, col: 1, row: 1 },
-    { uid: 'cooler-1', type: FurnitureType.COOLER, col: 17, row: 7 },
-    { uid: 'plant-right', type: FurnitureType.PLANT, col: 18, row: 1 },
-    { uid: 'whiteboard-1', type: FurnitureType.WHITEBOARD, col: 15, row: 0 },
-    // Left desk chairs
-    { uid: 'chair-l-top', type: FurnitureType.CHAIR, col: 4, row: 2 },
-    { uid: 'chair-l-bottom', type: FurnitureType.CHAIR, col: 5, row: 5 },
-    { uid: 'chair-l-left', type: FurnitureType.CHAIR, col: 3, row: 4 },
-    { uid: 'chair-l-right', type: FurnitureType.CHAIR, col: 6, row: 3 },
-    // Right desk chairs
-    { uid: 'chair-r-top', type: FurnitureType.CHAIR, col: 13, row: 2 },
-    { uid: 'chair-r-bottom', type: FurnitureType.CHAIR, col: 14, row: 5 },
-    { uid: 'chair-r-left', type: FurnitureType.CHAIR, col: 12, row: 4 },
-    { uid: 'chair-r-right', type: FurnitureType.CHAIR, col: 15, row: 3 },
+    // ── Left side (lobby/lounge) ──
+    { uid: 'mh-desk-l', type: FurnitureType.DESK, col: 4, row: 2 },
+    { uid: 'mh-ch-l1', type: FurnitureType.CHAIR, col: 4, row: 1 },
+    { uid: 'mh-ch-l2', type: FurnitureType.CHAIR, col: 3, row: 3 },
+    { uid: 'mh-ch-l3', type: FurnitureType.CHAIR, col: 6, row: 2 },
+    { uid: 'mh-ch-l4', type: FurnitureType.CHAIR, col: 5, row: 4 },
+    { uid: 'mh-pc-l', type: FurnitureType.PC, col: 5, row: 2 },
+    { uid: 'mh-bs-1', type: FurnitureType.BOOKSHELF, col: 1, row: 5 },
+    { uid: 'mh-pl-1', type: FurnitureType.PLANT, col: 1, row: 1 },
+    { uid: 'mh-pl-2', type: FurnitureType.PLANT, col: 9, row: 1 },
+    { uid: 'mh-pl-5', type: FurnitureType.PLANT, col: 8, row: 8 },
+    { uid: 'mh-lamp-1', type: FurnitureType.LAMP, col: 2, row: 7 },
+    { uid: 'mh-cl', type: FurnitureType.COOLER, col: 9, row: 9 },
+    { uid: 'mh-ch-lg1', type: FurnitureType.CHAIR, col: 3, row: 8 },
+    { uid: 'mh-ch-lg2', type: FurnitureType.CHAIR, col: 5, row: 8 },
+
+    // ── Right side (tech hub — 4 workstations) ──
+    // Station 1: top-left
+    { uid: 'mh-desk-r1', type: FurnitureType.DESK, col: 11, row: 1 },
+    { uid: 'mh-pc-r1',   type: FurnitureType.PC, col: 12, row: 1 },
+    { uid: 'mh-ch-r1',   type: FurnitureType.CHAIR, col: 13, row: 2 },
+    // Station 2: top-right
+    { uid: 'mh-desk-r2', type: FurnitureType.DESK, col: 15, row: 1 },
+    { uid: 'mh-pc-r2',   type: FurnitureType.PC, col: 16, row: 1 },
+    { uid: 'mh-ch-r2',   type: FurnitureType.CHAIR, col: 17, row: 2 },
+    // Station 3: bottom-left
+    { uid: 'mh-desk-r3', type: FurnitureType.DESK, col: 11, row: 7 },
+    { uid: 'mh-pc-r3',   type: FurnitureType.PC, col: 12, row: 7 },
+    { uid: 'mh-ch-r3',   type: FurnitureType.CHAIR, col: 13, row: 8 },
+    // Station 4: bottom-right
+    { uid: 'mh-desk-r4', type: FurnitureType.DESK, col: 15, row: 7 },
+    { uid: 'mh-pc-r4',   type: FurnitureType.PC, col: 16, row: 7 },
+    { uid: 'mh-ch-r4',   type: FurnitureType.CHAIR, col: 17, row: 8 },
+    // Tech hub decor
+    { uid: 'mh-wb', type: FurnitureType.WHITEBOARD, col: 13, row: 0 },
+    { uid: 'mh-pl-3', type: FurnitureType.PLANT, col: 18, row: 1 },
+    { uid: 'mh-pl-4', type: FurnitureType.PLANT, col: 18, row: 9 },
+    { uid: 'mh-lamp-2', type: FurnitureType.LAMP, col: 14, row: 5 },
   ]
 
   return { version: 1, cols: DEFAULT_COLS, rows: DEFAULT_ROWS, tiles, tileColors, furniture }
+}
+
+// ── Slack Room ────────────────────────────────────────────────────
+// Cool-toned tech workspace with multiple desk clusters and meeting area.
+export function createSlackRoomLayout(): OfficeLayout {
+  const W = TileType.WALL
+  const F1 = TileType.FLOOR_1
+  const F2 = TileType.FLOOR_2
+  const F3 = TileType.FLOOR_3
+  const F4 = TileType.FLOOR_4
+
+  const { tiles, tileColors } = buildTileGrid(DEFAULT_COLS, DEFAULT_ROWS, (r, c) => {
+    if (r === 0 || r === DEFAULT_ROWS - 1) return { tile: W, color: null }
+    if (c === 0) {
+      if (r === 5 || r === 6) return { tile: F4, color: FLOOR_DOORWAY }
+      return { tile: W, color: null }
+    }
+    if (c === DEFAULT_COLS - 1) return { tile: W, color: null }
+    if (c === 10) {
+      if (r >= 4 && r <= 6) return { tile: F4, color: FLOOR_DOORWAY }
+      return { tile: W, color: null }
+    }
+    // Meeting carpet area bottom-right
+    if (c >= 14 && c <= 18 && r >= 7 && r <= 9) return { tile: F3, color: FLOOR_CARPET_BLUE }
+    if (c < 10) return { tile: F1, color: FLOOR_COOL_BLUE }
+    return { tile: F2, color: FLOOR_SLATE }
+  })
+
+  const furniture: PlacedFurniture[] = [
+    // Left cluster — upper
+    { uid: 'sl-desk-1', type: FurnitureType.DESK, col: 3, row: 2 },
+    { uid: 'sl-ch-1a', type: FurnitureType.CHAIR, col: 3, row: 1 },
+    { uid: 'sl-ch-1b', type: FurnitureType.CHAIR, col: 2, row: 3 },
+    { uid: 'sl-ch-1c', type: FurnitureType.CHAIR, col: 5, row: 2 },
+    { uid: 'sl-pc-1', type: FurnitureType.PC, col: 4, row: 2 },
+    // Left cluster — lower
+    { uid: 'sl-desk-2', type: FurnitureType.DESK, col: 5, row: 6 },
+    { uid: 'sl-ch-2a', type: FurnitureType.CHAIR, col: 7, row: 6 },
+    { uid: 'sl-ch-2b', type: FurnitureType.CHAIR, col: 4, row: 7 },
+    { uid: 'sl-ch-2c', type: FurnitureType.CHAIR, col: 6, row: 8 },
+    { uid: 'sl-pc-2', type: FurnitureType.PC, col: 5, row: 6 },
+    // Right cluster — upper
+    { uid: 'sl-desk-3', type: FurnitureType.DESK, col: 14, row: 2 },
+    { uid: 'sl-ch-3a', type: FurnitureType.CHAIR, col: 14, row: 1 },
+    { uid: 'sl-ch-3b', type: FurnitureType.CHAIR, col: 13, row: 3 },
+    { uid: 'sl-ch-3c', type: FurnitureType.CHAIR, col: 16, row: 2 },
+    { uid: 'sl-ch-3d', type: FurnitureType.CHAIR, col: 15, row: 4 },
+    { uid: 'sl-pc-3', type: FurnitureType.PC, col: 15, row: 2 },
+    // Whiteboards
+    { uid: 'sl-wb-1', type: FurnitureType.WHITEBOARD, col: 7, row: 0 },
+    { uid: 'sl-wb-2', type: FurnitureType.WHITEBOARD, col: 12, row: 0 },
+    // Plants
+    { uid: 'sl-pl-1', type: FurnitureType.PLANT, col: 1, row: 1 },
+    { uid: 'sl-pl-2', type: FurnitureType.PLANT, col: 9, row: 1 },
+    { uid: 'sl-pl-3', type: FurnitureType.PLANT, col: 18, row: 1 },
+    { uid: 'sl-pl-4', type: FurnitureType.PLANT, col: 1, row: 9 },
+    // Bookshelves
+    { uid: 'sl-bs-1', type: FurnitureType.BOOKSHELF, col: 1, row: 3 },
+    // Lamps + cooler
+    { uid: 'sl-lamp-1', type: FurnitureType.LAMP, col: 9, row: 7 },
+    { uid: 'sl-lamp-2', type: FurnitureType.LAMP, col: 18, row: 5 },
+    { uid: 'sl-cl', type: FurnitureType.COOLER, col: 18, row: 9 },
+    // Meeting area chairs
+    { uid: 'sl-ch-m1', type: FurnitureType.CHAIR, col: 15, row: 8 },
+    { uid: 'sl-ch-m2', type: FurnitureType.CHAIR, col: 17, row: 8 },
+  ]
+
+  return { version: 1, cols: DEFAULT_COLS, rows: DEFAULT_ROWS, tiles, tileColors, furniture }
+}
+
+// ── Discord Room ──────────────────────────────────────────────────
+// Relaxed lounge with teal/green tones, reading nooks, and mixed seating.
+export function createDiscordRoomLayout(): OfficeLayout {
+  const W = TileType.WALL
+  const F1 = TileType.FLOOR_1
+  const F2 = TileType.FLOOR_2
+  const F3 = TileType.FLOOR_3
+  const F4 = TileType.FLOOR_4
+  const F5 = TileType.FLOOR_5
+
+  const { tiles, tileColors } = buildTileGrid(DEFAULT_COLS, DEFAULT_ROWS, (r, c) => {
+    if (r === 0 || r === DEFAULT_ROWS - 1) return { tile: W, color: null }
+    if (c === 0) {
+      if (r === 5 || r === 6) return { tile: F4, color: FLOOR_DOORWAY }
+      return { tile: W, color: null }
+    }
+    if (c === DEFAULT_COLS - 1) return { tile: W, color: null }
+    if (c === 10) {
+      if (r >= 4 && r <= 6) return { tile: F4, color: FLOOR_DOORWAY }
+      return { tile: W, color: null }
+    }
+    // Carpet areas
+    if (c >= 2 && c <= 5 && r >= 2 && r <= 4) return { tile: F3, color: FLOOR_CARPET_GREEN }
+    if (c >= 14 && c <= 17 && r >= 7 && r <= 9) return { tile: F5, color: FLOOR_CARPET_TEAL }
+    if (c < 10) return { tile: F1, color: FLOOR_TEAL }
+    return { tile: F2, color: FLOOR_SAGE }
+  })
+
+  const furniture: PlacedFurniture[] = [
+    // Left reading nook (on carpet)
+    { uid: 'dc-bs-1', type: FurnitureType.BOOKSHELF, col: 1, row: 2 },
+    { uid: 'dc-bs-2', type: FurnitureType.BOOKSHELF, col: 1, row: 4 },
+    { uid: 'dc-ch-n1', type: FurnitureType.CHAIR, col: 3, row: 3 },
+    { uid: 'dc-ch-n2', type: FurnitureType.CHAIR, col: 5, row: 3 },
+    { uid: 'dc-lamp-n', type: FurnitureType.LAMP, col: 4, row: 2 },
+    // Left work desk
+    { uid: 'dc-desk-l', type: FurnitureType.DESK, col: 5, row: 6 },
+    { uid: 'dc-ch-l1', type: FurnitureType.CHAIR, col: 4, row: 7 },
+    { uid: 'dc-ch-l2', type: FurnitureType.CHAIR, col: 7, row: 6 },
+    { uid: 'dc-ch-l3', type: FurnitureType.CHAIR, col: 6, row: 8 },
+    { uid: 'dc-pc-l', type: FurnitureType.PC, col: 5, row: 6 },
+    // Right work desk
+    { uid: 'dc-desk-r', type: FurnitureType.DESK, col: 13, row: 2 },
+    { uid: 'dc-ch-r1', type: FurnitureType.CHAIR, col: 12, row: 3 },
+    { uid: 'dc-ch-r2', type: FurnitureType.CHAIR, col: 15, row: 2 },
+    { uid: 'dc-ch-r3', type: FurnitureType.CHAIR, col: 14, row: 4 },
+    { uid: 'dc-pc-r', type: FurnitureType.PC, col: 13, row: 2 },
+    // Bottom-right lounge area (on teal carpet)
+    { uid: 'dc-ch-lg1', type: FurnitureType.CHAIR, col: 15, row: 8 },
+    { uid: 'dc-ch-lg2', type: FurnitureType.CHAIR, col: 17, row: 8 },
+    { uid: 'dc-lamp-lg', type: FurnitureType.LAMP, col: 16, row: 7 },
+    // Plants (scattered)
+    { uid: 'dc-pl-1', type: FurnitureType.PLANT, col: 9, row: 1 },
+    { uid: 'dc-pl-2', type: FurnitureType.PLANT, col: 18, row: 1 },
+    { uid: 'dc-pl-3', type: FurnitureType.PLANT, col: 1, row: 9 },
+    { uid: 'dc-pl-4', type: FurnitureType.PLANT, col: 11, row: 9 },
+    { uid: 'dc-pl-5', type: FurnitureType.PLANT, col: 1, row: 1 },
+    // Whiteboard + bookshelf
+    { uid: 'dc-wb', type: FurnitureType.WHITEBOARD, col: 15, row: 0 },
+    { uid: 'dc-bs-3', type: FurnitureType.BOOKSHELF, col: 18, row: 5 },
+    // Cooler
+    { uid: 'dc-cl-1', type: FurnitureType.COOLER, col: 11, row: 7 },
+    { uid: 'dc-cl-2', type: FurnitureType.COOLER, col: 18, row: 9 },
+  ]
+
+  return { version: 1, cols: DEFAULT_COLS, rows: DEFAULT_ROWS, tiles, tileColors, furniture }
+}
+
+/** Create the default office layout (legacy, used as fallback) */
+export function createDefaultLayout(): OfficeLayout {
+  return createMainHallLayout()
 }
 
 /** Serialize layout to JSON string */
@@ -309,16 +487,16 @@ function migrateLayout(layout: OfficeLayout): OfficeLayout {
         tileColors.push(null)
         break
       case 1: // was TILE_FLOOR → FLOOR_1 beige
-        tileColors.push(DEFAULT_LEFT_ROOM_COLOR)
+        tileColors.push(FLOOR_BEIGE)
         break
       case 2: // was WOOD_FLOOR → FLOOR_2 brown
-        tileColors.push(DEFAULT_RIGHT_ROOM_COLOR)
+        tileColors.push(FLOOR_WARM_BROWN)
         break
       case 3: // was CARPET → FLOOR_3 purple
-        tileColors.push(DEFAULT_CARPET_COLOR)
+        tileColors.push(FLOOR_CARPET_PURPLE)
         break
       case 4: // was DOORWAY → FLOOR_4 tan
-        tileColors.push(DEFAULT_DOORWAY_COLOR)
+        tileColors.push(FLOOR_DOORWAY)
         break
       default:
         // New tile types (5-7) without colors — use neutral gray

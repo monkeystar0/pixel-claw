@@ -6,9 +6,10 @@ import { existsSync } from 'node:fs';
 import type { WebSocket } from 'ws';
 import type { Config } from '../config.js';
 import type { SessionManager } from '../services/sessionManager.js';
+import type { GatewayLogReader } from '../openclaw/gatewayLogReader.js';
 import { setupWebSocketHandler } from './websocket.js';
 
-export async function createServer(config: Config, manager: SessionManager) {
+export async function createServer(config: Config, manager: SessionManager, logReader?: GatewayLogReader) {
   const app = Fastify({ logger: false });
 
   await app.register(fastifyWebsocket);
@@ -22,7 +23,7 @@ export async function createServer(config: Config, manager: SessionManager) {
   }
 
   const clients = new Set<WebSocket>();
-  const handleConnection = setupWebSocketHandler(manager, clients);
+  const handleConnection = setupWebSocketHandler(manager, clients, logReader);
 
   app.get('/ws', { websocket: true }, (socket) => {
     handleConnection(socket as unknown as WebSocket);

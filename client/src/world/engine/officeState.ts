@@ -589,6 +589,14 @@ export class OfficeState {
     }
   }
 
+  showThinkingBubble(id: number): void {
+    const ch = this.characters.get(id)
+    if (ch && ch.bubbleType !== 'thinking') {
+      ch.bubbleType = 'thinking'
+      ch.bubbleTimer = 0
+    }
+  }
+
   showWaitingBubble(id: number): void {
     const ch = this.characters.get(id)
     if (ch) {
@@ -597,15 +605,14 @@ export class OfficeState {
     }
   }
 
-  /** Dismiss bubble on click — permission: instant, waiting: quick fade */
+  /** Dismiss bubble on click — permission: instant, waiting: quick fade, thinking: instant */
   dismissBubble(id: number): void {
     const ch = this.characters.get(id)
     if (!ch || !ch.bubbleType) return
-    if (ch.bubbleType === 'permission') {
+    if (ch.bubbleType === 'permission' || ch.bubbleType === 'thinking') {
       ch.bubbleType = null
       ch.bubbleTimer = 0
     } else if (ch.bubbleType === 'waiting') {
-      // Trigger immediate fade (0.3s remaining)
       ch.bubbleTimer = Math.min(ch.bubbleTimer, DISMISS_BUBBLE_FAST_FADE_SEC)
     }
   }

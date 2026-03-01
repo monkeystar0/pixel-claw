@@ -3,6 +3,8 @@ import { GatewayClient } from '../../src/openclaw/gatewayClient.js';
 import { WebSocketServer, WebSocket as WsWebSocket } from 'ws';
 import { randomUUID } from 'node:crypto';
 
+const TEST_TOKEN = 'test-auth-token-12345';
+
 function createMockGatewayServer(port: number): {
   server: WebSocketServer;
   lastMessage: () => Record<string, unknown> | null;
@@ -16,9 +18,30 @@ function createMockGatewayServer(port: number): {
 
   server.on('connection', (socket) => {
     activeSocket = socket;
+
+    const nonce = randomUUID();
+    socket.send(JSON.stringify({
+      type: 'event',
+      event: 'connect.challenge',
+      payload: { nonce, ts: Date.now() },
+    }));
+
     socket.on('message', (raw) => {
       try {
         const data = JSON.parse(raw.toString());
+
+        if (data.type === 'req' && data.method === 'connect') {
+          if (data.params?.auth?.token === TEST_TOKEN) {
+            socket.send(JSON.stringify({
+              type: 'res',
+              id: data.id,
+              ok: true,
+              payload: { type: 'hello-ok', protocol: 3, policy: { tickIntervalMs: 15000 } },
+            }));
+          }
+          return;
+        }
+
         lastMsg = data;
 
         if (data.method === 'hello') {
@@ -64,24 +87,38 @@ describe('GatewayClient', () => {
     await mockServer.close();
   });
 
+  async function connectAndAuth(): Promise<void> {
+    client = new GatewayClient(`ws://localhost:${PORT}`, TEST_TOKEN);
+    await client.connect();
+    await new Promise<void>((resolve) => {
+      if ((client as unknown as { authenticated: boolean }).authenticated) {
+        resolve();
+      } else {
+        client.once('authenticated', resolve);
+      }
+    });
+  }
+
   it('should connect to gateway WebSocket', async () => {
-    client = new GatewayClient(`ws://localhost:${PORT}`);
+    client = new GatewayClient(`ws://localhost:${PORT}`, TEST_TOKEN);
     await client.connect();
 
     expect(client.isConnected()).toBe(true);
   });
 
+  it('should authenticate via challenge-response', async () => {
+    await connectAndAuth();
+    expect(client.isConnected()).toBe(true);
+  });
+
   it('should send chat.send with correct params', async () => {
-    client = new GatewayClient(`ws://localhost:${PORT}`);
-    await client.connect();
+    await connectAndAuth();
 
     const sessionKey = 'agent:main:main';
     const message = 'Hello agent';
 
-    // Start the send but don't await it yet
     const sendPromise = client.sendPrompt(sessionKey, message);
 
-    // Wait for message to arrive at server
     await new Promise(r => setTimeout(r, 100));
 
     const lastMsg = mockServer.lastMessage();
@@ -90,11 +127,11 @@ describe('GatewayClient', () => {
     expect((lastMsg!.params as Record<string, unknown>).sessionKey).toBe(sessionKey);
     expect((lastMsg!.params as Record<string, unknown>).message).toBe(message);
 
-    // Respond with success
     mockServer.respond({
-      jsonrpc: '2.0',
+      type: 'res',
       id: lastMsg!.id,
-      result: { ok: true, runId: 'run-123' },
+      ok: true,
+      payload: { runId: 'run-123' },
     });
 
     const result = await sendPromise;
@@ -102,8 +139,7 @@ describe('GatewayClient', () => {
   });
 
   it('should send chat.abort with correct params', async () => {
-    client = new GatewayClient(`ws://localhost:${PORT}`);
-    await client.connect();
+    await connectAndAuth();
 
     const sessionKey = 'agent:main:main';
     const runId = 'run-456';
@@ -118,46 +154,48 @@ describe('GatewayClient', () => {
     expect((lastMsg!.params as Record<string, unknown>).runId).toBe(runId);
 
     mockServer.respond({
-      jsonrpc: '2.0',
+      type: 'res',
       id: lastMsg!.id,
-      result: { aborted: true },
+      ok: true,
+      payload: { aborted: true },
     });
 
     await abortPromise;
   });
 
   it('should emit chat:event on unsolicited messages', async () => {
-    client = new GatewayClient(`ws://localhost:${PORT}`);
-    await client.connect();
+    await connectAndAuth();
 
     const eventPromise = new Promise<Record<string, unknown>>((resolve) => {
       client.once('chat:event', (data) => resolve(data));
     });
 
     mockServer.respond({
-      jsonrpc: '2.0',
-      method: 'chat.event',
-      params: {
+      type: 'event',
+      event: 'chat',
+      payload: {
         sessionKey: 'agent:main:main',
-        type: 'text',
-        text: 'Working on it...',
+        state: 'delta',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Working on it...' }],
+        },
       },
     });
 
     const event = await eventPromise;
-    expect(event.type).toBe('text');
-    expect(event.text).toBe('Working on it...');
+    expect(event.state).toBe('delta');
+    expect(event.sessionKey).toBe('agent:main:main');
   });
 
   it('should handle connection errors gracefully', async () => {
-    client = new GatewayClient('ws://localhost:1');
+    client = new GatewayClient('ws://localhost:1', TEST_TOKEN);
     await expect(client.connect()).rejects.toThrow();
     expect(client.isConnected()).toBe(false);
   });
 
   it('should disconnect cleanly', async () => {
-    client = new GatewayClient(`ws://localhost:${PORT}`);
-    await client.connect();
+    await connectAndAuth();
     expect(client.isConnected()).toBe(true);
 
     client.disconnect();

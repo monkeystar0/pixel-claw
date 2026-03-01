@@ -45,21 +45,19 @@ describe('ChannelRegistry', () => {
     await registry.start();
 
     const channels = registry.getChannels();
-    expect(channels.length).toBe(3);
+    expect(channels.length).toBe(2);
 
-    const slack = channels.find(c => c.name === '#general');
+    const slack = channels.find(c => c.type === 'slack');
     expect(slack).toBeDefined();
-    expect(slack!.type).toBe('slack');
+    expect(slack!.name).toBe('Slack');
     expect(slack!.enabled).toBe(true);
+    expect(slack!.subChannels).toBe(1);
 
-    const devOps = channels.find(c => c.name === '#dev-ops');
-    expect(devOps).toBeDefined();
-    expect(devOps!.enabled).toBe(false);
-
-    const discord = channels.find(c => c.name === '#main');
+    const discord = channels.find(c => c.type === 'discord');
     expect(discord).toBeDefined();
-    expect(discord!.type).toBe('discord');
-    expect(discord!.enabled).toBe(true);
+    expect(discord!.name).toBe('Discord');
+    expect(discord!.enabled).toBe(false);
+    expect(discord!.subChannels).toBe(1);
   });
 
   it('should include channel type even without sub-channels', async () => {
@@ -76,8 +74,9 @@ describe('ChannelRegistry', () => {
     const channels = registry.getChannels();
     expect(channels.length).toBe(1);
     expect(channels[0].type).toBe('telegram');
-    expect(channels[0].name).toBe('telegram');
+    expect(channels[0].name).toBe('Telegram');
     expect(channels[0].enabled).toBe(true);
+    expect(channels[0].subChannels).toBe(0);
   });
 
   it('should handle missing config file gracefully', async () => {
@@ -122,7 +121,9 @@ describe('ChannelRegistry', () => {
     writeFileSync(configPath, JSON.stringify(newConfig));
 
     const channels = await updatedPromise;
-    expect(channels.length).toBe(3);
+    expect(channels.length).toBe(2);
+    expect(channels.find(c => c.type === 'slack')?.subChannels).toBe(2);
+    expect(channels.find(c => c.type === 'discord')?.subChannels).toBe(1);
   }, 10_000);
 
   it('should handle config with no channels section', async () => {

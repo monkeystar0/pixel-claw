@@ -255,6 +255,7 @@ export function parseSessionFile(filePath: string): SessionData | null {
 
   return {
     sessionId,
+    sessionAlias: null,
     label: label ?? sessionId,
     status,
     elapsed,
@@ -266,6 +267,9 @@ export function parseSessionFile(filePath: string): SessionData | null {
     filePath,
     startTime,
     origin: null,
+    tokenUsage: null,
+    model: null,
+    updatedAt: mtime,
   };
 }
 

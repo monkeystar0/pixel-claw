@@ -22,6 +22,7 @@ function makeMockChannelRegistry() {
     start: vi.fn(async () => {}),
     stop: vi.fn(),
     getChannels: vi.fn(() => channels),
+    updateConnectedProviders: vi.fn(),
     _setChannels: (c: ChannelInfo[]) => { channels = c; },
   });
 }
@@ -40,6 +41,7 @@ function makeMockGateway() {
 function makeSampleSession(overrides: Partial<SessionData> = {}): SessionData {
   return {
     sessionId: 'session-001',
+    sessionAlias: null,
     label: 'Test session',
     status: 'running',
     elapsed: 120,
@@ -99,18 +101,19 @@ describe('SessionManager', () => {
 
   it('should return channels from registry', async () => {
     const channel: ChannelInfo = {
-      id: 'slack:#general',
-      name: '#general',
+      id: 'slack',
+      name: 'Slack',
       type: 'slack',
       enabled: true,
       connected: false,
+      subChannels: 2,
     };
     channels._setChannels([channel]);
     await manager.start();
 
     const result = manager.getChannels();
     expect(result).toHaveLength(1);
-    expect(result[0].name).toBe('#general');
+    expect(result[0].name).toBe('Slack');
   });
 
   it('should forward session:added from watcher', async () => {
@@ -160,23 +163,43 @@ describe('SessionManager', () => {
 
     expect(manager.mapSessionToRoom(makeSampleSession({
       origin: { provider: 'slack', surface: 'slack', from: null, label: '#general' },
-    }))).toBe('slack');
+    }))).toBe('slack-room');
 
     expect(manager.mapSessionToRoom(makeSampleSession({
       origin: { provider: 'discord', surface: 'discord', from: null, label: '#lobby' },
-    }))).toBe('discord');
+    }))).toBe('discord-room');
 
     expect(manager.mapSessionToRoom(makeSampleSession({
       origin: { provider: 'webchat', surface: 'webchat', from: null, label: null },
     }))).toBe('main-hall');
   });
 
-  it('should route sendPrompt to gateway', async () => {
+  it('should route sendPrompt to gateway with registered key', async () => {
     await manager.start();
     manager.registerSessionKey('session-001', 'agent:main:test');
 
     const result = await manager.sendPrompt('session-001', 'Hello agent');
     expect(gateway.sendPrompt).toHaveBeenCalledWith('agent:main:test', 'Hello agent');
+    expect(result.runId).toBe('run-123');
+  });
+
+  it('should resolve sessionKey via sessionAlias when no explicit key registered', async () => {
+    const session = makeSampleSession({ sessionAlias: 'global' });
+    watcher._sessions.set(session.sessionId, session);
+    await manager.start();
+
+    const result = await manager.sendPrompt('session-001', 'Hello agent');
+    expect(gateway.sendPrompt).toHaveBeenCalledWith('global', 'Hello agent');
+    expect(result.runId).toBe('run-123');
+  });
+
+  it('should fallback to sessionId as sessionKey when no key or alias exists', async () => {
+    const session = makeSampleSession({ sessionAlias: null });
+    watcher._sessions.set(session.sessionId, session);
+    await manager.start();
+
+    const result = await manager.sendPrompt('session-001', 'Hello agent');
+    expect(gateway.sendPrompt).toHaveBeenCalledWith('session-001', 'Hello agent');
     expect(result.runId).toBe('run-123');
   });
 
@@ -188,6 +211,31 @@ describe('SessionManager', () => {
     expect(gateway.abortSession).toHaveBeenCalledWith('agent:main:test', undefined);
   });
 
+  it('should fallback to sessionId for abortSession when no key registered', async () => {
+    await manager.start();
+
+    await manager.abortSession('session-001');
+    expect(gateway.abortSession).toHaveBeenCalledWith('session-001', undefined);
+  });
+
+  it('should route resetSession to gateway via sendPrompt with /reset', async () => {
+    await manager.start();
+    manager.registerSessionKey('session-001', 'agent:main:test');
+
+    const result = await manager.resetSession('session-001');
+    expect(gateway.sendPrompt).toHaveBeenCalledWith('agent:main:test', '/reset');
+    expect(result.runId).toBe('run-123');
+  });
+
+  it('should resolve resetSession key via sessionAlias', async () => {
+    const session = makeSampleSession({ sessionAlias: 'global' });
+    watcher._sessions.set(session.sessionId, session);
+    await manager.start();
+
+    await manager.resetSession('session-001');
+    expect(gateway.sendPrompt).toHaveBeenCalledWith('global', '/reset');
+  });
+
   it('should forward channels:updated from registry', async () => {
     await manager.start();
 
@@ -196,7 +244,7 @@ describe('SessionManager', () => {
     });
 
     const newChannels: ChannelInfo[] = [
-      { id: 'slack:#dev', name: '#dev', type: 'slack', enabled: true, connected: false },
+      { id: 'slack', name: 'Slack', type: 'slack', enabled: true, connected: false, subChannels: 1 },
     ];
     channels.emit('channels:updated', newChannels);
 
@@ -204,16 +252,100 @@ describe('SessionManager', () => {
     expect(received).toHaveLength(1);
   });
 
-  it('should forward chat:event from gateway', async () => {
+  it('should forward chat:event from gateway with sessionId resolved via key map', async () => {
+    await manager.start();
+    manager.registerSessionKey('session-001', 'agent:main:main');
+
+    const eventPromise = new Promise<Record<string, unknown>>((resolve) => {
+      manager.once('chat:event', resolve);
+    });
+
+    gateway.emit('chat:event', {
+      sessionKey: 'agent:main:main',
+      runId: 'run-1',
+      state: 'delta',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Working...' }],
+        timestamp: Date.now(),
+      },
+    });
+
+    const received = await eventPromise;
+    expect(received.sessionId).toBe('session-001');
+    expect(received.state).toBe('delta');
+    expect((received.message as ChatMessage).role).toBe('assistant');
+    expect((received.message as ChatMessage).content).toBe('Working...');
+  });
+
+  it('should forward chat:event resolved via sessionAlias', async () => {
+    const session = makeSampleSession({ sessionAlias: 'global' });
+    watcher._sessions.set(session.sessionId, session);
     await manager.start();
 
     const eventPromise = new Promise<Record<string, unknown>>((resolve) => {
       manager.once('chat:event', resolve);
     });
 
-    gateway.emit('chat:event', { sessionKey: 'agent:main:main', type: 'text', text: 'Working...' });
+    gateway.emit('chat:event', {
+      sessionKey: 'global',
+      runId: 'run-2',
+      state: 'final',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Done!' }],
+        timestamp: Date.now(),
+      },
+    });
 
     const received = await eventPromise;
-    expect(received.type).toBe('text');
+    expect(received.sessionId).toBe('session-001');
+    expect(received.state).toBe('final');
+    expect((received.message as ChatMessage).content).toBe('Done!');
+  });
+
+  it('should forward chat:event with fallback sessionId when no key mapping found', async () => {
+    await manager.start();
+
+    const eventPromise = new Promise<Record<string, unknown>>((resolve) => {
+      manager.once('chat:event', resolve);
+    });
+
+    gateway.emit('chat:event', {
+      sessionKey: 'unknown-key',
+      sessionId: 'fallback-id',
+      runId: 'run-3',
+      state: 'final',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Hello' }],
+        timestamp: Date.now(),
+      },
+    });
+
+    const received = await eventPromise;
+    expect(received.sessionId).toBe('fallback-id');
+  });
+
+  it('should handle chat:event with error state', async () => {
+    const session = makeSampleSession({ sessionAlias: 'global' });
+    watcher._sessions.set(session.sessionId, session);
+    await manager.start();
+
+    const eventPromise = new Promise<Record<string, unknown>>((resolve) => {
+      manager.once('chat:event', resolve);
+    });
+
+    gateway.emit('chat:event', {
+      sessionKey: 'global',
+      runId: 'run-4',
+      state: 'error',
+      errorMessage: 'Agent crashed',
+    });
+
+    const received = await eventPromise;
+    expect(received.sessionId).toBe('session-001');
+    expect(received.state).toBe('final');
+    expect((received.message as ChatMessage).content).toContain('Agent crashed');
   });
 });

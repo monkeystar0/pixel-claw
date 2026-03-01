@@ -154,7 +154,7 @@ export function getInteractTarget(
   return bestId
 }
 
-const PLAYER_CHARACTER_ID = -999
+export const PLAYER_CHARACTER_ID = -999
 
 export function playerToCharacter(player: Player): Character {
   return {

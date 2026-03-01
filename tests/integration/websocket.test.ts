@@ -37,6 +37,8 @@ function makeMockSessionManager() {
     getHistory: async (_sid: string, _limit: number) => history,
     sendPrompt: async (_sid: string, _msg: string) => ({ runId: 'run-integ-1' }),
     abortSession: async (_sid: string) => {},
+    resetSession: async (_sid: string) => ({ runId: 'run-reset-1' }),
+    isGatewayConnected: () => false,
     start: async () => {},
     stop: () => {},
   });
@@ -202,6 +204,22 @@ describe('WebSocket Server Integration', () => {
 
     const response = await waitForMessage(messages, ws, 'session:abortAck');
     expect(response.sessionId).toBe('integ-001');
+    expect(response.ok).toBe(true);
+    ws.close();
+  });
+
+  it('should handle session:resetSession request', async () => {
+    const { ws, messages } = await connectAndCollectMessages(PORT);
+    await new Promise(r => setTimeout(r, 100));
+
+    sendMessage(ws, {
+      type: 'session:resetSession',
+      sessionId: 'integ-001',
+    });
+
+    const response = await waitForMessage(messages, ws, 'session:resetAck');
+    expect(response.sessionId).toBe('integ-001');
+    expect(response.runId).toBe('run-reset-1');
     expect(response.ok).toBe(true);
     ws.close();
   });

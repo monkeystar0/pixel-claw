@@ -4,6 +4,7 @@ import type { SessionData } from '../hooks/useWebSocket.js'
 interface ActionsTabProps {
   session: SessionData
   onAbort: (sessionId: string) => void
+  onReset: (sessionId: string) => void
   onClose: () => void
 }
 
@@ -29,8 +30,8 @@ const confirmOverlay: React.CSSProperties = {
   marginTop: 8,
 }
 
-export function ActionsTab({ session, onAbort, onClose }: ActionsTabProps) {
-  const [confirmAction, setConfirmAction] = useState<'abort' | null>(null)
+export function ActionsTab({ session, onAbort, onReset, onClose }: ActionsTabProps) {
+  const [confirmAction, setConfirmAction] = useState<'abort' | 'reset' | null>(null)
   const [actionResult, setActionResult] = useState<string | null>(null)
 
   const handleAbort = useCallback(() => {
@@ -42,6 +43,16 @@ export function ActionsTab({ session, onAbort, onClose }: ActionsTabProps) {
       onClose()
     }, 1500)
   }, [session.sessionId, onAbort, onClose])
+
+  const handleReset = useCallback(() => {
+    onReset(session.sessionId)
+    setConfirmAction(null)
+    setActionResult('Session reset sent — starting fresh')
+    setTimeout(() => {
+      setActionResult(null)
+      onClose()
+    }, 2000)
+  }, [session.sessionId, onReset, onClose])
 
   const isRunning = session.status === 'running'
 
@@ -58,6 +69,68 @@ export function ActionsTab({ session, onAbort, onClose }: ActionsTabProps) {
           textAlign: 'center',
         }}>
           {actionResult}
+        </div>
+      )}
+
+      <button
+        style={{
+          ...buttonStyle,
+          background: 'rgba(255, 180, 50, 0.08)',
+          borderColor: 'rgba(255, 180, 50, 0.3)',
+          color: '#ffbb66',
+          cursor: 'pointer',
+        }}
+        onClick={() => setConfirmAction('reset')}
+      >
+        <span style={{ fontWeight: 'bold' }}>Reset Session</span>
+        <span style={{ fontSize: 10, opacity: 0.7 }}>
+          Clear conversation history and start fresh
+        </span>
+      </button>
+
+      {confirmAction === 'reset' && (
+        <div style={{
+          ...confirmOverlay,
+          background: 'rgba(255, 180, 50, 0.08)',
+          border: '1px solid rgba(255, 180, 50, 0.3)',
+        }}>
+          <div style={{ fontSize: 12, color: '#ffbb66', marginBottom: 8 }}>
+            Reset this session? Chat history will be cleared and the agent starts fresh.
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              style={{
+                flex: 1,
+                padding: '6px 12px',
+                background: '#5a4a20',
+                border: '1px solid #8a7a30',
+                borderRadius: 2,
+                color: '#fff',
+                fontFamily: 'monospace',
+                fontSize: 11,
+                cursor: 'pointer',
+              }}
+              onClick={handleReset}
+            >
+              Confirm Reset
+            </button>
+            <button
+              style={{
+                flex: 1,
+                padding: '6px 12px',
+                background: '#252540',
+                border: '1px solid #4a4a6a',
+                borderRadius: 2,
+                color: '#aaa',
+                fontFamily: 'monospace',
+                fontSize: 11,
+                cursor: 'pointer',
+              }}
+              onClick={() => setConfirmAction(null)}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
@@ -118,17 +191,6 @@ export function ActionsTab({ session, onAbort, onClose }: ActionsTabProps) {
               Cancel
             </button>
           </div>
-        </div>
-      )}
-
-      {!isRunning && (
-        <div style={{
-          padding: 12,
-          textAlign: 'center',
-          fontSize: 11,
-          color: '#555',
-        }}>
-          Session is {session.status} — no actions available
         </div>
       )}
     </div>

@@ -10,8 +10,18 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  contextTokens: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
 export interface SessionData {
   sessionId: string;
+  sessionAlias: string | null;
   label: string;
   status: 'running' | 'complete' | 'failed';
   elapsed: number;
@@ -23,6 +33,9 @@ export interface SessionData {
   filePath: string;
   startTime: number;
   origin: SessionOrigin | null;
+  tokenUsage: TokenUsage | null;
+  model: string | null;
+  updatedAt: number;
 }
 
 export interface SessionOrigin {
@@ -47,6 +60,7 @@ export interface ChannelInfo {
   type: string;
   enabled: boolean;
   connected: boolean;
+  subChannels: number;
 }
 
 export type AgentStatus = 'active' | 'idle' | 'complete' | 'failed';

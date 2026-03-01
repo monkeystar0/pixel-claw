@@ -8,7 +8,7 @@ services:
     environment:
       - OPENCLAW_DIR=/openclaw
       - OPENCLAW_AGENT=${OPENCLAW_AGENT:-main}
-      - OPENCLAW_GATEWAY_URL=${OPENCLAW_GATEWAY_URL:-ws://host.docker.internal:3578}
+      - OPENCLAW_GATEWAY_URL=${OPENCLAW_GATEWAY_URL:-ws://host.docker.internal:18789}
       - PORT=3000
       - POLL_INTERVAL=${POLL_INTERVAL:-500}
     extra_hosts:

@@ -6,6 +6,7 @@ interface ChatTabProps {
   onSendPrompt: (sessionId: string, message: string) => void
   onGetHistory: (sessionId: string, limit?: number) => void
   messages: ChatMessage[]
+  isPending: boolean
 }
 
 const messageListStyle: React.CSSProperties = {
@@ -69,9 +70,8 @@ const roleLabelStyle: React.CSSProperties = {
   letterSpacing: 1,
 }
 
-export function ChatTab({ session, onSendPrompt, onGetHistory, messages }: ChatTabProps) {
+export function ChatTab({ session, onSendPrompt, onGetHistory, messages, isPending }: ChatTabProps) {
   const [input, setInput] = useState('')
-  const [sending, setSending] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const hasRequestedRef = useRef(false)
 
@@ -86,16 +86,14 @@ export function ChatTab({ session, onSendPrompt, onGetHistory, messages }: ChatT
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight
     }
-  }, [messages])
+  }, [messages, isPending])
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim()
-    if (!trimmed || sending) return
-    setSending(true)
+    if (!trimmed || isPending) return
     onSendPrompt(session.sessionId, trimmed)
     setInput('')
-    setTimeout(() => setSending(false), 1000)
-  }, [input, sending, session.sessionId, onSendPrompt])
+  }, [input, isPending, session.sessionId, onSendPrompt])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -126,6 +124,11 @@ export function ChatTab({ session, onSendPrompt, onGetHistory, messages }: ChatT
             </div>
           </div>
         ))}
+        {isPending && messages[messages.length - 1]?.role !== 'assistant' && (
+          <div style={{ color: '#6a6a8a', fontSize: 11, padding: '4px 0' }}>
+            <span style={{ animation: 'pulse 1.2s infinite' }}>Thinking...</span>
+          </div>
+        )}
       </div>
 
       <div style={inputContainerStyle}>
@@ -134,18 +137,18 @@ export function ChatTab({ session, onSendPrompt, onGetHistory, messages }: ChatT
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message..."
-          disabled={sending}
+          placeholder={isPending ? 'Waiting for response...' : 'Type a message...'}
+          disabled={isPending}
         />
         <button
           style={{
             ...sendButtonStyle,
-            opacity: sending || !input.trim() ? 0.5 : 1,
+            opacity: isPending || !input.trim() ? 0.5 : 1,
           }}
           onClick={handleSend}
-          disabled={sending || !input.trim()}
+          disabled={isPending || !input.trim()}
         >
-          {sending ? '...' : 'Send'}
+          {isPending ? '...' : 'Send'}
         </button>
       </div>
     </div>

@@ -73,14 +73,23 @@ const roleLabelStyle: React.CSSProperties = {
 export function ChatTab({ session, onSendPrompt, onGetHistory, messages, isPending }: ChatTabProps) {
   const [input, setInput] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
-  const hasRequestedRef = useRef(false)
+  const lastFetchedAtRef = useRef(0)
+  const fetchThrottleRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => {
-    if (!hasRequestedRef.current) {
-      onGetHistory(session.sessionId, 20)
-      hasRequestedRef.current = true
-    }
+    onGetHistory(session.sessionId, 20)
+    lastFetchedAtRef.current = session.updatedAt
+    return () => clearTimeout(fetchThrottleRef.current)
   }, [session.sessionId, onGetHistory])
+
+  useEffect(() => {
+    if (session.updatedAt <= lastFetchedAtRef.current) return
+    clearTimeout(fetchThrottleRef.current)
+    fetchThrottleRef.current = setTimeout(() => {
+      lastFetchedAtRef.current = session.updatedAt
+      onGetHistory(session.sessionId, 20)
+    }, 800)
+  }, [session.updatedAt, session.sessionId, onGetHistory])
 
   useEffect(() => {
     if (listRef.current) {

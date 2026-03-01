@@ -11,6 +11,28 @@
 
 Visualize OpenClaw agent sessions as interactive pixel art characters in a multi-room virtual office. Walk around, watch agents work in real time, and interact with them to view status, chat, or control sessions.
 
+## Screenshots
+
+<p align="center">
+  <img src="screenshots/slack-room.png" alt="Slack Room — agents working at desks" width="720" /><br/>
+  <em>Slack Room — agents auto-routed from Slack channels, working at desks in real time</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/interaction-panel.png" alt="Interaction panel — session status" width="720" /><br/>
+  <em>Interaction panel — view session status, chat with agents, or trigger actions</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/wardrobe.png" alt="Wardrobe — character customization" width="720" /><br/>
+  <em>Wardrobe — customize your character's skin palette and hue</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/monitoring-overlay.png" alt="Agent Monitoring System" width="720" /><br/>
+  <em>Agent Monitoring System — live dashboard with sessions, tokens, and gateway activity feed</em>
+</p>
+
 ## Features
 
 - **Real-time agent visualization** — OpenClaw sessions appear as pixel art characters that type, read, walk, and idle based on actual agent activity

@@ -108,6 +108,14 @@ export function useWebSocket() {
           sessionsRef.current = next;
           return next;
         });
+        if (updated.status !== 'running') {
+          setPendingSessionIds(prev => {
+            if (!prev.has(updated.sessionId)) return prev;
+            const next = new Set(prev);
+            next.delete(updated.sessionId);
+            return next;
+          });
+        }
         break;
       }
       case 'session:removed':

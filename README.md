@@ -1,5 +1,10 @@
 # pixel-claw
 
+[![GitHub stars](https://img.shields.io/github/stars/monkeystar0/pixel-claw?style=flat-square)](https://github.com/monkeystar0/pixel-claw/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/monkeystar0/pixel-claw?style=flat-square)](https://github.com/monkeystar0/pixel-claw/network/members)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://github.com/monkeystar0/pixel-claw/blob/master/LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-22%2B-green?style=flat-square&logo=node.js)](https://nodejs.org)
+
 Visualize OpenClaw agent sessions as interactive pixel art characters in a multi-room virtual office. Walk around, watch agents work in real time, and interact with them to view status, chat, or control sessions.
 
 ## Features
@@ -76,56 +81,6 @@ All configuration via environment variables. See `.env.example` for defaults.
 | M | Toggle monitoring overlay |
 | ? | Show help overlay |
 
-## Architecture
-
-```
-pixel-claw/
-├── src/                        # Backend (Node.js + Fastify)
-│   ├── main.ts                 # Entry point, wires all services
-│   ├── config.ts               # Environment variable configuration
-│   ├── openclaw/               # OpenClaw integration
-│   │   ├── sessionParser.ts        # JSONL transcript parser
-│   │   ├── sessionWatcher.ts       # File watcher with chokidar
-│   │   ├── channelRegistry.ts      # Channel config reader
-│   │   ├── gatewayClient.ts        # Gateway WebSocket client
-│   │   ├── gatewayLogReader.ts     # Gateway log file reader/tailer
-│   │   └── types.ts                # Shared type definitions
-│   ├── server/
-│   │   ├── fastify.ts              # HTTP + WebSocket server
-│   │   └── websocket.ts           # WebSocket message handler
-│   └── services/
-│       └── sessionManager.ts       # Orchestrates backend components
-├── client/                     # Frontend (React + Vite)
-│   ├── src/
-│   │   ├── App.tsx                 # Main app with game loop
-│   │   ├── hooks/                  # React hooks
-│   │   │   ├── useWebSocket.ts         # Backend communication
-│   │   │   ├── useWorld.ts             # WorldState bridge
-│   │   │   └── useGameInput.ts         # Keyboard input
-│   │   ├── world/                  # Rendering engine
-│   │   │   ├── engine/                 # Game loop, characters, renderer
-│   │   │   ├── sprites/                # Sprite data, cache, loader
-│   │   │   └── layout/                 # Tile map, pathfinding, furniture
-│   │   ├── interaction/            # Agent interaction UI
-│   │   │   ├── InteractionPanel.tsx
-│   │   │   ├── StatusTab.tsx
-│   │   │   ├── ChatTab.tsx
-│   │   │   └── ActionsTab.tsx
-│   │   ├── ui/                     # Overlays and HUD
-│   │   │   ├── MonitorOverlay.tsx      # Agent monitoring dashboard
-│   │   │   ├── MonitorButton.tsx       # Toggle button for monitoring
-│   │   │   ├── RoomIndicator.tsx       # Current room display
-│   │   │   └── HelpOverlay.tsx         # Help screen
-│   │   └── components/
-│   │       └── RoomSelector.tsx        # Room navigation widget
-│   └── public/sprites/         # Character and wall PNG assets
-├── tests/                      # Test suite (Vitest)
-│   ├── unit/                       # Unit tests
-│   └── integration/                # WebSocket integration tests
-├── Dockerfile                  # Multi-stage production build
-└── docker-compose.yml          # Docker Compose config
-```
-
 ### Data Flow
 
 1. Backend watches `~/.openclaw/agents/main/sessions/` for JSONL file changes
@@ -151,4 +106,4 @@ The rendering engine and sprite system in `client/src/world/` is derived from [p
 
 ## License
 
-[MIT](LICENSE)
+This project is licensed under the [MIT License](LICENSE).

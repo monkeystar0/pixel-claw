@@ -145,6 +145,10 @@ npm test          # Watch mode
 npm run test:run  # Single run (131 tests)
 ```
 
+## Acknowledgements
+
+The rendering engine and sprite system in `client/src/world/` is derived from [pixel-agents](https://github.com/pablodelucca/pixel-agents) by Pablo De Lucca (MIT License). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
+
 ## License
 
-ISC
+[MIT](LICENSE)
